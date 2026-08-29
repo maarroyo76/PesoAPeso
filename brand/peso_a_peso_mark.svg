@@ -1,0 +1,56 @@
+<svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fondo (paperDeep) -->
+  <rect width="100" height="100" rx="22" fill="#E7DEEC"/>
+
+  <!-- Sombra diagonal de fondo para profundidad (inkSoft/rule mix) -->
+  <polygon points="16,46 70,100 20,100 16,86" fill="#C7B4D1" opacity="0.4"/>
+
+  <!-- CONTENIDO INTERNO ASOMÁNDOSE -->
+
+  <!-- 1. Billete (green) - Orientado a la derecha -->
+  <g transform="translate(42, 45) rotate(12)">
+    <rect x="-16" y="-36" width="32" height="45" rx="2" fill="#4F7A5C" stroke="#4B2E6B" stroke-width="1.5"/>
+    <rect x="-12" y="-32" width="24" height="37" rx="1" fill="none" stroke="#F4F0F6" stroke-width="1"/>
+    <circle cx="0" cy="-18" r="5" fill="#F4F0F6"/>
+    <circle cx="0" cy="-18" r="3" fill="#4F7A5C"/>
+    <line x1="-8" y1="-8" x2="8" y2="-8" stroke="#F4F0F6" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="-8" y1="-3" x2="4" y2="-3" stroke="#F4F0F6" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- 2. Hoja de registro (paper + rule) - Orientada a la derecha -->
+  <g transform="translate(60, 48) rotate(12)">
+    <rect x="-15" y="-36" width="30" height="42" rx="2" fill="#F4F0F6" stroke="#4B2E6B" stroke-width="1.5"/>
+    <line x1="-10" y1="-26" x2="10" y2="-26" stroke="#C7B4D1" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="-10" y1="-18" x2="10" y2="-18" stroke="#C7B4D1" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="-10" y1="-10" x2="10" y2="-10" stroke="#C7B4D1" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="-10" y1="-2" x2="6" y2="-2" stroke="#C7B4D1" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- 3. Moneda única en vista frontal -->
+  <g transform="translate(28, 38)">
+    <!-- Borde exterior (rule) -->
+    <circle cx="0" cy="0" r="13" fill="#C7B4D1" stroke="#4B2E6B" stroke-width="1.5"/>
+    <!-- Relieve interior (paper) -->
+    <circle cx="0" cy="0" r="9" fill="#F4F0F6" stroke="#4B2E6B" stroke-width="1.5"/>
+
+    <!-- Símbolo de Peso dibujado en trazos (rust) -->
+    <path d="M 2.5,-2 C 1.5,-3.5 -2,-3.5 -2,-1 C -2,1 2,1 2,3 C 2,5 -1.5,5 -2.5,3.5" fill="none" stroke="#A3352B" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="0" y1="-4.5" x2="0" y2="4.5" stroke="#A3352B" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- CUERPO DE LA BILLETERA / LIBRETA -->
+
+  <!-- Grosor de las hojas / borde superior trasero -->
+  <path d="M 18 45 L 82 45 L 82 52 L 18 52 Z" fill="#F4F0F6" stroke="#4B2E6B" stroke-width="1.5"/>
+  <rect x="18" y="45" width="64" height="6" rx="2" fill="#F4F0F6" stroke="#4B2E6B" stroke-width="1.5"/>
+
+  <!-- Tapa principal frontal (ink) -->
+  <rect x="16" y="48" width="68" height="38" rx="4" fill="#4B2E6B" stroke="#4B2E6B" stroke-width="1.5"/>
+
+  <!-- Detalle del pliegue / lomo de la libreta (inkSoft) -->
+  <line x1="24" y1="49.5" x2="24" y2="84.5" stroke="#7C6789" stroke-width="2"/>
+
+  <!-- Broche de cierre (inkSoft) -->
+  <path d="M 82 58 L 90 58 A 5 5 0 0 1 95 63 L 95 67 A 5 5 0 0 1 90 72 L 82 72 Z" fill="#7C6789" stroke="#4B2E6B" stroke-width="1.5"/>
+  <line x1="90" y1="65" x2="90" y2="65" stroke="#4B2E6B" stroke-width="2" stroke-linecap="round"/>
+</svg>
