@@ -16,9 +16,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqlite3/open.dart';
 
-import 'package:gasto_a_mano/core/providers/app_providers.dart';
-import 'package:gasto_a_mano/data/local/app_database.dart';
-import 'package:gasto_a_mano/main.dart';
+import 'package:peso_a_peso/core/providers/app_providers.dart';
+import 'package:peso_a_peso/data/local/app_database.dart';
+import 'package:peso_a_peso/main.dart';
 
 void main() {
   setUpAll(() async {

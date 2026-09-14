@@ -1,4 +1,4 @@
-name: gasto_a_mano
+name: peso_a_peso
 description: "Peso a Peso — Registra tus gastos, peso a peso. MVP de app de presupuesto y gastos: registro manual, local-first, sin datos bancarios."
 publish_to: 'none'
 version: 0.1.0

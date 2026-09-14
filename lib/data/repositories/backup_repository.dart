@@ -23,7 +23,7 @@ class BackupRepository {
     final jsonStr = await _exportJson();
     final bytes = Uint8List.fromList(utf8.encode(jsonStr));
     final fileName =
-        'gasto_a_mano_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json';
+        'peso_a_peso_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json';
 
     final path = await FilePicker.saveFile(
       dialogTitle: 'Guardar respaldo',

@@ -1,4 +1,4 @@
-package com.example.gasto_a_mano
+package cl.pesoapeso.app
 
 import io.flutter.embedding.android.FlutterActivity
 

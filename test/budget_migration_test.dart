@@ -7,7 +7,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gasto_a_mano/data/local/app_database.dart';
+import 'package:peso_a_peso/data/local/app_database.dart';
 import 'package:sqlite3/open.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
