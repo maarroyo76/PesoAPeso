@@ -41,6 +41,20 @@ const Map<String, IconData> kSelectableCategoryIcons = {
   'celebration': Icons.celebration_outlined,
   'build': Icons.build_outlined,
   'category': Icons.category_outlined,
+  'local_bar': Icons.local_bar_outlined,
+  'local_pharmacy': Icons.local_pharmacy_outlined,
+  'water_drop': Icons.water_drop_outlined,
+  'phone_iphone': Icons.phone_iphone_outlined,
+  'subscriptions': Icons.subscriptions_outlined,
+  'local_laundry_service': Icons.local_laundry_service_outlined,
+  'content_cut': Icons.content_cut_outlined,
+  'local_parking': Icons.local_parking_outlined,
+  'volunteer_activism': Icons.volunteer_activism_outlined,
+  'receipt_long': Icons.receipt_long_outlined,
+  'elderly': Icons.elderly_outlined,
+  'menu_book': Icons.menu_book_outlined,
+  'currency_exchange': Icons.currency_exchange_outlined,
+  'park': Icons.park_outlined,
 };
 
 const kDefaultCategoryIconKey = 'category';

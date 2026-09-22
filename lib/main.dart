@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -23,6 +24,17 @@ void main() async {
   runApp(const ProviderScope(child: GastoAManoApp()));
 }
 
+/// Habilita arrastre con mouse en listas horizontales (ej. los sliders de
+/// color/ícono de categoría) — por defecto Flutter solo scrollea con mouse
+/// vía la rueda, no con drag; en touch (Android/iOS) no hace falta.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        ...super.dragDevices,
+        PointerDeviceKind.mouse,
+      };
+}
+
 class GastoAManoApp extends StatelessWidget {
   const GastoAManoApp({super.key});
 
@@ -32,6 +44,7 @@ class GastoAManoApp extends StatelessWidget {
       title: 'Peso a Peso',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      scrollBehavior: _AppScrollBehavior(),
       home: const _StartupGate(),
     );
   }

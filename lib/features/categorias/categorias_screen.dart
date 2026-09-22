@@ -7,17 +7,33 @@ import '../../core/theme/category_icons.dart';
 import '../../data/local/app_database.dart';
 
 /// RF03: crear, editar y eliminar categorías.
+///
+/// Se eligen a mano (no una rueda de color libre) para que toda categoría
+/// quede en un tono "tinta de cuaderno" — mismo nivel de saturación/brillo
+/// que el resto de la paleta ledger, nunca un color que desentone. El
+/// selector es un slider horizontal (ver `showCategoryEditor`), así que
+/// agregar más opciones no alarga el diálogo.
 const kCategoryColorPalette = <int>[
-  0xFF2F6F4E,
-  0xFFB8842E,
-  0xFF3B6B78,
-  0xFF6B3F5C,
-  0xFF4B7A3E,
-  0xFF8A5A2B,
-  0xFFA63D2B,
-  0xFF5C6B54,
-  0xFF7A4B8A,
-  0xFF2B6B8A,
+  0xFF2F6F4E, // verde
+  0xFFB8842E, // ocre/dorado
+  0xFF3B6B78, // teal
+  0xFF6B3F5C, // ciruela
+  0xFF4B7A3E, // oliva
+  0xFF8A5A2B, // marrón
+  0xFFA63D2B, // terracota
+  0xFF5C6B54, // salvia
+  0xFF7A4B8A, // violeta
+  0xFF2B6B8A, // azul
+  0xFF4B4B8A, // índigo
+  0xFF8A7A2B, // mostaza
+  0xFF8A2B45, // vino
+  0xFF2B8A7A, // esmeralda
+  0xFF6B4B2B, // nogal
+  0xFF3F5C3F, // bosque
+  0xFF4B6B8A, // azul pizarra
+  0xFF8A3F6B, // frambuesa
+  0xFFA65C3D, // cobre
+  0xFF5C4B8A, // lavanda oscuro
 ];
 
 String _slugifyCategoryName(String name, List<String> existingIds) {
@@ -124,6 +140,7 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
   var selectedColor = category?.colorValue ?? kCategoryColorPalette.first;
   var selectedIconKey =
       category?.iconKey ?? kSelectableCategoryIcons.keys.first;
+  final iconEntries = kSelectableCategoryIcons.entries.toList();
 
   final result = await showDialog<bool>(
     context: context,
@@ -154,30 +171,39 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                         letterSpacing: 1.2,
                         color: AppColors.inkSoft)),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: kCategoryColorPalette.map((cv) {
-                    final selected = cv == selectedColor;
-                    return GestureDetector(
-                      onTap: () => setDialogState(() => selectedColor = cv),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Color(cv),
-                          shape: BoxShape.circle,
-                          border: selected
-                              ? Border.all(color: AppColors.ink, width: 2)
-                              : null,
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: kCategoryColorPalette.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, i) {
+                      final cv = kCategoryColorPalette[i];
+                      final selected = cv == selectedColor;
+                      return Center(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setDialogState(() => selectedColor = cv),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Color(cv),
+                              shape: BoxShape.circle,
+                              border: selected
+                                  ? Border.all(color: AppColors.ink, width: 2)
+                                  : null,
+                            ),
+                            child: selected
+                                ? const Icon(Icons.check,
+                                    size: 16, color: Colors.white)
+                                : null,
+                          ),
                         ),
-                        child: selected
-                            ? const Icon(Icons.check,
-                                size: 16, color: Colors.white)
-                            : null,
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 20),
                 const Text('ÍCONO',
@@ -186,34 +212,45 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                         letterSpacing: 1.2,
                         color: AppColors.inkSoft)),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: kSelectableCategoryIcons.entries.map((entry) {
-                    final selected = entry.key == selectedIconKey;
-                    final previewColor = Color(selectedColor);
-                    return GestureDetector(
-                      onTap: () =>
-                          setDialogState(() => selectedIconKey = entry.key),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? previewColor.withAlpha(40)
-                              : AppColors.paperDeep,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: selected ? previewColor : AppColors.rule,
-                            width: selected ? 2 : 1,
+                SizedBox(
+                  height: 48,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: iconEntries.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final entry = iconEntries[i];
+                      final selected = entry.key == selectedIconKey;
+                      final previewColor = Color(selectedColor);
+                      return Center(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(
+                              () => selectedIconKey = entry.key),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? previewColor.withAlpha(40)
+                                  : AppColors.paperDeep,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color:
+                                    selected ? previewColor : AppColors.rule,
+                                width: selected ? 2 : 1,
+                              ),
+                            ),
+                            child: Icon(entry.value,
+                                size: 18,
+                                color: selected
+                                    ? previewColor
+                                    : AppColors.inkSoft),
                           ),
                         ),
-                        child: Icon(entry.value,
-                            size: 18,
-                            color: selected ? previewColor : AppColors.inkSoft),
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
