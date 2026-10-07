@@ -131,4 +131,107 @@ void main() {
     final generated = await db.runRecurringCatchUp();
     expect(generated, isEmpty);
   });
+
+  test('recurrente del día 31 se genera el último día de un mes de 30 días',
+      () async {
+    await db.insertRecurringTemplate(
+      categoryId: 'vivienda_test',
+      amount: 250000,
+      note: 'Arriendo',
+      dayOfMonth: 31,
+      initialYearMonth: 202603,
+    );
+
+    // 29 de abril: todavía no llega el último día, no debe generar.
+    expect(await db.runRecurringCatchUp(today: DateTime(2026, 4, 29)),
+        isEmpty);
+
+    // 30 de abril: último día del mes, debe generar con fecha 30.
+    final generated =
+        await db.runRecurringCatchUp(today: DateTime(2026, 4, 30));
+    expect(generated, hasLength(1));
+    expect(generated.single.date, DateTime(2026, 4, 30));
+  });
+
+  test('recurrente del día 30 se genera el 28 de febrero', () async {
+    await db.insertRecurringTemplate(
+      categoryId: 'vivienda_test',
+      amount: 1000,
+      note: 'Suscripción',
+      dayOfMonth: 30,
+      initialYearMonth: 202601,
+    );
+
+    final generated =
+        await db.runRecurringCatchUp(today: DateTime(2026, 2, 28));
+    expect(generated, hasLength(1));
+    expect(generated.single.date, DateTime(2026, 2, 28));
+  });
+
+  test('reactivar un recurrente pausado no genera el gasto del mes en curso',
+      () async {
+    await db.insertRecurringTemplate(
+      categoryId: 'vivienda_test',
+      amount: 250000,
+      note: 'Arriendo',
+      dayOfMonth: 1,
+      initialYearMonth: 202601,
+    );
+    await db.customStatement(
+        'UPDATE recurring_templates SET active = 0 WHERE category_id = ?',
+        ['vivienda_test']);
+    final tpl = (await db.select(db.recurringTemplates).get()).single;
+
+    await db.updateRecurringTemplate(
+      tpl.id,
+      categoryId: 'vivienda_test',
+      amount: 250000,
+      note: 'Arriendo',
+      dayOfMonth: 1,
+      active: true,
+      today: DateTime(2026, 5, 20),
+    );
+
+    expect(await db.runRecurringCatchUp(today: DateTime(2026, 5, 21)),
+        isEmpty,
+        reason: 'mayo ya se dio por cubierto al reactivar');
+    expect(await db.runRecurringCatchUp(today: DateTime(2026, 6, 1)),
+        hasLength(1),
+        reason: 'junio sí se genera con normalidad');
+  });
+
+  test('editar un recurrente activo no altera lastGeneratedYearMonth',
+      () async {
+    await db.insertRecurringTemplate(
+      categoryId: 'vivienda_test',
+      amount: 1000,
+      note: 'x',
+      dayOfMonth: 5,
+      initialYearMonth: 202601,
+    );
+    final tpl = (await db.select(db.recurringTemplates).get()).single;
+    await db.updateRecurringTemplate(tpl.id,
+        categoryId: 'vivienda_test',
+        amount: 2000,
+        note: 'x',
+        dayOfMonth: 5,
+        active: true,
+        today: DateTime(2026, 5, 20));
+    final after = (await db.select(db.recurringTemplates).get()).single;
+    expect(after.lastGeneratedYearMonth, 202601);
+    expect(after.amount, 2000);
+  });
+
+  test('contar referencias a una categoría', () async {
+    expect(await db.countTransactionsForCategory('vivienda_test'), 0);
+    await db.insertRecurringTemplate(
+      categoryId: 'vivienda_test',
+      amount: 1,
+      note: '',
+      dayOfMonth: 1,
+      initialYearMonth: 202601,
+    );
+    expect(await db.countRecurringTemplatesForCategory('vivienda_test'), 1);
+    expect(await db.countQuickExpenseTemplatesForCategory('vivienda_test'), 0);
+  });
 }

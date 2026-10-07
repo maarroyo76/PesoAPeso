@@ -8,6 +8,18 @@ import '../../core/utils/formatting.dart';
 
 const _kLastOpenYearMonthKey = 'last_open_year_month';
 
+/// Mes cuyo remanente corresponde evaluar: el último mes en que la app se
+/// abrió (yyyyMM), siempre que sea anterior al actual. Usar el mes calendario
+/// previo fallaría si el usuario estuvo meses sin abrir la app: ese mes no
+/// tiene gastos y todo su presupuesto parecería "sin gastar".
+DateTime? remainderMonthFor(int? lastOpenYm, int currentYm) {
+  if (lastOpenYm == null || lastOpenYm >= currentYm) return null;
+  final year = lastOpenYm ~/ 100;
+  final month = lastOpenYm % 100;
+  if (month < 1 || month > 12) return null;
+  return DateTime(year, month);
+}
+
 /// RF15: al abrir la app en un mes distinto al de la última sesión, si el
 /// mes anterior cerró con presupuesto sin gastar, pregunta una sola vez si
 /// sumarlo al presupuesto del mes actual o aportarlo a una meta. Guarda el
@@ -21,8 +33,8 @@ Future<void> checkPreviousMonthRemainder(
   final lastOpenStr = await settings.get(_kLastOpenYearMonthKey);
   final lastOpenYm = lastOpenStr == null ? null : int.tryParse(lastOpenStr);
 
-  if (lastOpenYm != currentYm && lastOpenYm != null) {
-    final prevMonth = DateTime(now.year, now.month - 1);
+  final prevMonth = remainderMonthFor(lastOpenYm, currentYm);
+  if (prevMonth != null) {
     // RF04/RF15: el remanente se calcula contra el presupuesto TOTAL que el
     // usuario fija directamente (MonthlyBudgets), no contra la suma de
     // presupuestos por categoría.

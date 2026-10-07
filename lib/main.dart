@@ -63,6 +63,7 @@ class _StartupGate extends ConsumerStatefulWidget {
 
 class _StartupGateState extends ConsumerState<_StartupGate> {
   bool? _needsOnboarding;
+  Object? _startupError;
 
   @override
   void initState() {
@@ -71,13 +72,67 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
   }
 
   Future<void> _check() async {
-    final done =
-        await ref.read(settingsRepositoryProvider).get(kOnboardingCompletedKey);
-    if (mounted) setState(() => _needsOnboarding = done != 'true');
+    try {
+      final done = await ref
+          .read(settingsRepositoryProvider)
+          .get(kOnboardingCompletedKey);
+      if (mounted) setState(() => _needsOnboarding = done != 'true');
+    } catch (e) {
+      // Si la base no abre (p. ej. la clave de cifrado ya no coincide con el
+      // archivo), mostramos el error en vez de dejar el spinner para siempre.
+      if (mounted) setState(() => _startupError = e);
+    }
+  }
+
+  void _retry() {
+    setState(() => _startupError = null);
+    ref.invalidate(appDatabaseProvider);
+    _check();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_startupError != null) {
+      return Scaffold(
+        backgroundColor: AppColors.paper,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline,
+                    size: 40, color: AppColors.rust),
+                const SizedBox(height: 16),
+                const Text('No se pudo abrir tu base de datos',
+                    style: TextStyle(fontSize: 18, color: AppColors.ink)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tus datos están cifrados con una clave que vive solo en '
+                  'este dispositivo. Si reinstalaste la app o cambiaste de '
+                  'equipo, restaura tu archivo de respaldo.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Text('$_startupError',
+                    textAlign: TextAlign.center,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
+                const SizedBox(height: 20),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
+                  onPressed: _retry,
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (_needsOnboarding == null) {
       return const Scaffold(
         backgroundColor: AppColors.paper,
@@ -100,7 +155,7 @@ class RootShell extends ConsumerStatefulWidget {
 }
 
 class _RootShellState extends ConsumerState<RootShell>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _index = 0;
   late final _fadeController = AnimationController(
     vsync: this,
@@ -110,12 +165,37 @@ class _RootShellState extends ConsumerState<RootShell>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // RF12: al abrir la app, genera la ocurrencia del mes actual de
     // cualquier plantilla recurrente que todavía no la tenga.
     WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupChecks());
   }
 
+  bool _checking = false;
+
+  /// La app puede quedar semanas en segundo plano: al volver, se repiten los
+  /// chequeos de arranque (recurrentes del mes, remanente) y se refresca el
+  /// mes en curso. Ambos son idempotentes.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final now = DateTime.now();
+    ref.read(currentMonthProvider.notifier).state =
+        DateTime(now.year, now.month);
+    _runStartupChecks();
+  }
+
   Future<void> _runStartupChecks() async {
+    if (_checking) return;
+    _checking = true;
+    try {
+      await _doStartupChecks();
+    } finally {
+      _checking = false;
+    }
+  }
+
+  Future<void> _doStartupChecks() async {
     final generated =
         await ref.read(recurringTemplatesRepositoryProvider).runCatchUp();
     if (!mounted) return;
@@ -189,6 +269,7 @@ class _RootShellState extends ConsumerState<RootShell>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     super.dispose();
   }

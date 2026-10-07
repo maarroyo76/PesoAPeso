@@ -10,6 +10,13 @@ import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/transactions_repository.dart';
 import '../utils/budget_resolver.dart';
 
+/// Mes calendario en curso. Se refresca al volver la app a primer plano, para
+/// que una sesión que cruza el cambio de mes no siga mostrando el mes viejo.
+final currentMonthProvider = StateProvider<DateTime>((ref) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month);
+});
+
 /// Una sola instancia de la base de datos para toda la app.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();

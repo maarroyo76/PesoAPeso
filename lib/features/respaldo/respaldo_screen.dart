@@ -24,6 +24,52 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
     );
   }
 
+  /// Errores de respaldo en un diálogo (un SnackBar se pierde y no deja
+  /// espacio para explicar qué hacer). Los [FormatException] ya traen un
+  /// mensaje pensado para el usuario; cualquier otra cosa se resume sin
+  /// mostrar el texto técnico de la excepción.
+  Future<void> _showFriendlyError({
+    required String title,
+    required Object error,
+    required String fallback,
+    String? reassurance,
+  }) async {
+    final message = error is FormatException ? error.message : fallback;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.paper,
+        icon: const Icon(Icons.error_outline, color: AppColors.rust),
+        title: Text(title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, color: AppColors.ink)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message,
+                style: const TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+            if (reassurance != null) ...[
+              const SizedBox(height: 12),
+              Text(reassurance,
+                  style: const TextStyle(
+                      color: AppColors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ],
+        ),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _export() async {
     setState(() => _busy = true);
     try {
@@ -31,7 +77,12 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
       if (!mounted) return;
       if (saved) _showMessage('Respaldo guardado.');
     } catch (e) {
-      if (mounted) _showMessage('No se pudo exportar: $e', isError: true);
+      await _showFriendlyError(
+        title: 'No se pudo guardar el respaldo',
+        error: e,
+        fallback: 'Ocurrió un problema al guardar el archivo. Revisa que '
+            'haya espacio disponible e inténtalo de nuevo.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -70,7 +121,13 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
       if (!mounted) return;
       if (restored) _showMessage('Datos restaurados.');
     } catch (e) {
-      if (mounted) _showMessage('No se pudo restaurar: $e', isError: true);
+      await _showFriendlyError(
+        title: 'No pudimos restaurar tu respaldo',
+        error: e,
+        fallback: 'Ocurrió un problema inesperado al leer el archivo. '
+            'Inténtalo de nuevo con otro archivo.',
+        reassurance: 'Tus datos actuales no se modificaron.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -90,6 +147,12 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
               'archivo de respaldo periódicamente por si cambias de equipo o '
               'lo necesitas recuperar — funciona completamente sin conexión.',
               style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Ojo: la base de datos del teléfono está cifrada, pero el '
+              'archivo de respaldo NO. Guárdalo en un lugar de confianza.',
+              style: TextStyle(color: AppColors.rust, fontSize: 12),
             ),
             const SizedBox(height: 24),
             SizedBox(

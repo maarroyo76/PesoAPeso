@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../backup/backup_io.dart';
+import '../backup/backup_validation.dart';
 import '../local/app_database.dart';
 
 /// RF16/RF17/RNF09: respaldo local — exportar todos los datos a un archivo
@@ -49,14 +50,36 @@ class BackupRepository {
     if (result == null || result.files.isEmpty) return false;
 
     final bytes = result.files.single.bytes;
-    if (bytes == null) return false;
-
-    final decoded = jsonDecode(utf8.decode(bytes));
-    if (decoded is! Map<String, dynamic> || decoded['categories'] is! List) {
-      throw const FormatException(
-          'El archivo no tiene el formato de respaldo esperado.');
+    if (bytes == null) {
+      throw const FormatException(kBackupUnreadableMessage);
     }
-    await _db.restoreAllData(decoded);
+    return restoreFromBytes(bytes);
+  }
+
+  /// Valida y restaura un respaldo ya leído en memoria. Separado de
+  /// [importBackup] para poder probarlo sin el selector de archivos. Cualquier
+  /// fallo sale como [FormatException] con un mensaje apto para el usuario, y
+  /// los datos actuales no se tocan (la validación corre antes de borrar y
+  /// `restoreAllData` es una transacción).
+  Future<bool> restoreFromBytes(Uint8List bytes) async {
+    if (bytes.isEmpty) throw const FormatException(kBackupUnreadableMessage);
+    if (bytes.length > kMaxBackupBytes) {
+      throw const FormatException(kBackupTooLargeMessage);
+    }
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(bytes));
+    } on FormatException {
+      throw const FormatException(kBackupNotARespaldoMessage);
+    }
+    validateBackupData(decoded);
+    try {
+      await _db.restoreAllData(decoded as Map<String, dynamic>);
+    } on TypeError {
+      // Campos con tipo equivocado dentro de una fila.
+      throw const FormatException(kBackupCorruptMessage);
+    }
     return true;
   }
 }

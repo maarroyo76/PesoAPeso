@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:meta/meta.dart';
 
+import '../backup/backup_validation.dart';
 import 'connection.dart';
 
 part 'app_database.g.dart';
@@ -262,6 +263,7 @@ class AppDatabase extends _$AppDatabase {
                 ),
               );
             }
+            // ignore: experimental_member_use
             await m.alterTable(TableMigration(categories));
           }
           if (from < 3) {
@@ -374,26 +376,26 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<int> countTransactionsForCategory(String categoryId) async {
-    final rows = await (select(transactions)
-          ..where((t) => t.categoryId.equals(categoryId)))
-        .get();
-    return rows.length;
+  Future<int> _countWhere<T extends HasResultSet, D>(
+      ResultSetImplementation<T, D> table, Expression<bool> where) async {
+    final count = countAll();
+    final row = await (selectOnly(table)
+          ..addColumns([count])
+          ..where(where))
+        .getSingle();
+    return row.read(count) ?? 0;
   }
 
-  Future<int> countRecurringTemplatesForCategory(String categoryId) async {
-    final rows = await (select(recurringTemplates)
-          ..where((t) => t.categoryId.equals(categoryId)))
-        .get();
-    return rows.length;
-  }
+  Future<int> countTransactionsForCategory(String categoryId) =>
+      _countWhere(transactions, transactions.categoryId.equals(categoryId));
 
-  Future<int> countQuickExpenseTemplatesForCategory(String categoryId) async {
-    final rows = await (select(quickExpenseTemplates)
-          ..where((t) => t.categoryId.equals(categoryId)))
-        .get();
-    return rows.length;
-  }
+  Future<int> countRecurringTemplatesForCategory(String categoryId) =>
+      _countWhere(
+          recurringTemplates, recurringTemplates.categoryId.equals(categoryId));
+
+  Future<int> countQuickExpenseTemplatesForCategory(String categoryId) =>
+      _countWhere(quickExpenseTemplates,
+          quickExpenseTemplates.categoryId.equals(categoryId));
 
   Future<void> deleteCategory(String id) async {
     await (delete(categoryBudgets)..where((b) => b.categoryId.equals(id))).go();
@@ -472,23 +474,6 @@ class AppDatabase extends _$AppDatabase {
         .watch();
   }
 
-  Future<List<Transaction>> transactionsForMonth(DateTime month) {
-    final start = DateTime(month.year, month.month, 1);
-    final end = DateTime(month.year, month.month + 1, 1);
-    return (select(transactions)
-          ..where((t) =>
-              t.date.isBiggerOrEqualValue(start) &
-              t.date.isSmallerThanValue(end)))
-        .get();
-  }
-
-  Future<int> totalSpentByCategory(String categoryId, DateTime month) async {
-    final rows = await transactionsForMonth(month);
-    return rows
-        .where((t) => t.categoryId == categoryId)
-        .fold<int>(0, (sum, t) => sum + t.amount);
-  }
-
   Stream<List<RecurringTemplate>> watchRecurringTemplates() =>
       select(recurringTemplates).watch();
 
@@ -511,9 +496,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// RF25: editar un recurrente ya creado (categoría, monto, nota, día del
-  /// mes, activo/pausado). No toca `lastGeneratedYearMonth` — si el usuario
-  /// sube el monto a mitad de mes, no vuelve a generar la ocurrencia ya
-  /// hecha, solo cambia el monto de las futuras.
+  /// mes, activo/pausado). Solo toca `lastGeneratedYearMonth` al reactivar un
+  /// pausado (ver abajo) — si el usuario sube el monto a mitad de mes, no
+  /// vuelve a generar la ocurrencia ya hecha, solo cambia el de las futuras.
   Future<void> updateRecurringTemplate(
     int id, {
     required String categoryId,
@@ -521,14 +506,30 @@ class AppDatabase extends _$AppDatabase {
     required String note,
     required int dayOfMonth,
     required bool active,
-  }) {
-    return (update(recurringTemplates)..where((t) => t.id.equals(id))).write(
+    DateTime? today,
+  }) async {
+    final existing = await (select(recurringTemplates)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (existing == null) return;
+    // Al reactivar un recurrente pausado, el mes en curso se da por cubierto:
+    // si no, el próximo catch-up generaría de golpe el gasto de este mes
+    // aunque el usuario lo haya pausado justamente para que no ocurra.
+    final now = today ?? DateTime.now();
+    final reactivated = !existing.active && active;
+    final lastGenerated = reactivated
+        ? (existing.lastGeneratedYearMonth > now.year * 100 + now.month
+            ? existing.lastGeneratedYearMonth
+            : now.year * 100 + now.month)
+        : existing.lastGeneratedYearMonth;
+    await (update(recurringTemplates)..where((t) => t.id.equals(id))).write(
       RecurringTemplatesCompanion(
         categoryId: Value(categoryId),
         amount: Value(amount),
         note: Value(note),
         dayOfMonth: Value(dayOfMonth),
         active: Value(active),
+        lastGeneratedYearMonth: Value(lastGenerated),
       ),
     );
   }
@@ -543,8 +544,8 @@ class AppDatabase extends _$AppDatabase {
   /// backfill de meses saltados — evita gastos "fantasma" si el usuario
   /// estuvo mucho tiempo sin abrir la app. Devuelve las transacciones
   /// generadas (para el aviso de RF20).
-  Future<List<Transaction>> runRecurringCatchUp() async {
-    final now = DateTime.now();
+  Future<List<Transaction>> runRecurringCatchUp({DateTime? today}) async {
+    final now = today ?? DateTime.now();
     final currentYm = now.year * 100 + now.month;
     final templates = await (select(recurringTemplates)
           ..where((t) => t.active.equals(true)))
@@ -553,9 +554,10 @@ class AppDatabase extends _$AppDatabase {
     final generated = <Transaction>[];
     for (final tpl in templates) {
       if (tpl.lastGeneratedYearMonth >= currentYm) continue;
-      if (now.day < tpl.dayOfMonth) continue;
-
+      // Se compara contra el día ya recortado al largo del mes: un recurrente
+      // del 31 debe generarse el 30 de abril, no quedar sin generar nunca.
       final day = tpl.dayOfMonth.clamp(1, _daysInMonth(now.year, now.month));
+      if (now.day < day) continue;
       final date = DateTime(now.year, now.month, day);
       final id = await into(transactions).insert(
         TransactionsCompanion.insert(
@@ -675,7 +677,7 @@ class AppDatabase extends _$AppDatabase {
   /// Vuelca todas las tablas a JSON, listo para escribir a un archivo local.
   Future<Map<String, dynamic>> exportAllData() async {
     return {
-      'version': 1,
+      'version': kBackupFormatVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'categories':
           (await select(categories).get()).map((r) => r.toJson()).toList(),
