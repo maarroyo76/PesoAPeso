@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +10,7 @@ import '../../core/theme/category_icons.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/ledger_paper.dart';
 import '../../core/widgets/month_selector.dart';
+import '../../core/widgets/month_swipe.dart';
 import '../../core/widgets/section_label.dart';
 import '../../data/local/app_database.dart';
 import 'transaction_detail_sheet.dart';
@@ -22,15 +25,60 @@ class ResumenScreen extends ConsumerStatefulWidget {
 class _ResumenScreenState extends ConsumerState<ResumenScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
 
-  void _prev() =>
-      setState(() => _month = DateTime(_month.year, _month.month - 1));
+  static const _hintSeenKey = 'swipe_month_hint_seen';
+  static const _hintDuration = Duration(seconds: 8);
+
+  /// null = todavía no se sabe (se lee de ajustes), true = mostrar la pista.
+  bool? _showHint;
+  Timer? _hintTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHint();
+  }
+
+  @override
+  void dispose() {
+    _hintTimer?.cancel();
+    super.dispose();
+  }
+
+  /// La pista de "desliza para cambiar de mes" se muestra una sola vez: se
+  /// oculta al primer cambio de mes (con swipe o con las flechas) o a los 8
+  /// segundos, y queda registrada para no volver a salir.
+  Future<void> _loadHint() async {
+    final seen = await ref.read(settingsRepositoryProvider).get(_hintSeenKey);
+    if (!mounted || seen == 'true') return;
+    setState(() => _showHint = true);
+    _hintTimer = Timer(_hintDuration, _dismissHint);
+  }
+
+  void _dismissHint() {
+    _hintTimer?.cancel();
+    if (_showHint != true) return;
+    if (mounted) setState(() => _showHint = false);
+    ref.read(settingsRepositoryProvider).set(_hintSeenKey, 'true');
+  }
+
+  void _prev() {
+    _dismissHint();
+    setState(() => _month = DateTime(_month.year, _month.month - 1));
+  }
 
   void _next() {
     final next = DateTime(_month.year, _month.month + 1);
     final now = DateTime.now();
     if (!next.isAfter(DateTime(now.year, now.month))) {
+      _dismissHint();
       setState(() => _month = next);
     }
+  }
+
+  void _goToCurrentMonth() {
+    final now = DateTime.now();
+    _dismissHint();
+    setState(() => _month = DateTime(now.year, now.month));
   }
 
   bool get _isCurrentMonth {
@@ -40,6 +88,12 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Si la app cruza el cambio de mes con esta pantalla en el mes en curso,
+    // salta al nuevo mes en vez de quedarse en el anterior.
+    ref.listen<DateTime>(currentMonthProvider, (prev, next) {
+      if (prev != null && _month == prev) setState(() => _month = next);
+    });
+
     final categoriesAsync = ref.watch(categoriesProvider);
     final txAsync = ref.watch(monthTransactionsProvider(_month));
     final budgets = ref.watch(monthBudgetsProvider(_month));
@@ -81,7 +135,9 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     final overallRatio =
         totalBudget > 0 ? (totalSpent / totalBudget).clamp(0.0, 1.0) : 0.0;
 
-    final recentTx = [...transactions]
+    final recentTx = transactions
+        .where((t) => categoriesById.containsKey(t.categoryId))
+        .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     final recent = recentTx.take(5).toList();
 
@@ -92,14 +148,21 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
           label: capitalizeMonth(_month, monthFmt),
           onPrev: _prev,
           onNext: _isCurrentMonth ? null : _next,
+          onToday: _isCurrentMonth ? null : _goToCurrentMonth,
         ),
         const SizedBox(height: 20),
-        _TotalCard(
-          spent: totalSpent,
-          budget: totalBudget,
-          ratio: overallRatio,
-          prevSpent: prevSpent,
+        MonthSwipe(
+          month: _month,
+          onPrev: _prev,
+          onNext: _isCurrentMonth ? null : _next,
+          child: _TotalCard(
+            spent: totalSpent,
+            budget: totalBudget,
+            ratio: overallRatio,
+            prevSpent: prevSpent,
+          ),
         ),
+        SwipeHint(visible: _showHint == true),
         const SizedBox(height: 24),
         const SectionLabel('Por categoría'),
         const SizedBox(height: 12),
@@ -121,6 +184,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
             ),
           )
         else
+          // `recent` ya excluye gastos con categoría inexistente (p. ej. de un
+          // respaldo inconsistente) para no romper toda la pantalla.
           ...recent.map((t) => _RecentTxRow(
                 tx: t,
                 category: categoriesById[t.categoryId]!,
@@ -413,9 +478,14 @@ class _CategoryRow extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(category.name,
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w500)),
+                      Expanded(
+                        child: Text(category.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w500)),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
                         currencyFmt.format(spent),
                         style: TextStyle(

@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'info_hint.dart';
 
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.text, {super.key});
+  const SectionLabel(this.text, {super.key, this.info});
   final String text;
+
+  /// Si se entrega, muestra un ícono "i" y la explicación al pasar el mouse
+  /// o tocar el título.
+  final String? info;
 
   @override
   Widget build(BuildContext context) {
     // La rayita corta bajo el texto imita la pestaña de una sección en un
     // libro contable físico (folio/rubro), no un subrayado decorativo.
-    return Column(
+    final label = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -33,6 +38,21 @@ class SectionLabel extends StatelessWidget {
           ),
         ),
       ],
+    );
+    if (info == null) return label;
+    return InfoTooltip(
+      message: info!,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          label,
+          const SizedBox(width: 6),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: InfoIcon(),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -7,7 +7,9 @@ import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/formatting.dart';
+import '../../core/widgets/info_hint.dart';
 import '../../core/widgets/month_selector.dart';
+import '../../core/widgets/month_swipe.dart';
 import '../../core/widgets/section_label.dart';
 import '../../data/local/app_database.dart';
 
@@ -40,6 +42,14 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
     }
   }
 
+  void _goToCurrentMonth() {
+    final now = DateTime.now();
+    setState(() {
+      _month = DateTime(now.year, now.month);
+      _touchedIndex = -1;
+    });
+  }
+
   bool get _isCurrentMonth {
     final now = DateTime.now();
     return _month.year == now.year && _month.month == now.month;
@@ -52,6 +62,12 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Si la app cruza el cambio de mes con esta pantalla en el mes en curso,
+    // salta al nuevo mes en vez de quedarse en el anterior.
+    ref.listen<DateTime>(currentMonthProvider, (prev, next) {
+      if (prev != null && _month == prev) setState(() => _month = next);
+    });
+
     final months = _months;
     final currentMonth = months.last;
     final prevMonth = DateTime(currentMonth.year, currentMonth.month - 1);
@@ -130,22 +146,38 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
           label: capitalizeMonth(_month, monthFmt),
           onPrev: _prev,
           onNext: _isCurrentMonth ? null : _next,
+          onToday: _isCurrentMonth ? null : _goToCurrentMonth,
         ),
         const SizedBox(height: 20),
-        SectionLabel(isCurrentCalendarMonth ? 'Mes actual' : 'Resumen del mes'),
+        SectionLabel(
+          isCurrentCalendarMonth ? 'Mes actual' : 'Resumen del mes',
+          info: 'Cifras rápidas del mes que estás viendo. Toca o pasa el '
+              'mouse sobre cada recuadro para saber qué significa.',
+        ),
         const SizedBox(height: 16),
-        _InsightGrid(
-          totalSpent: totalCurrentMonth,
-          daysElapsed: daysElapsed,
-          daysInMonth: daysInMonth,
-          recurringSpent: recurringSpent,
-          variableSpent: variableSpent,
-          isCurrentMonth: isCurrentCalendarMonth,
+        MonthSwipe(
+          month: _month,
+          onPrev: _prev,
+          onNext: _isCurrentMonth ? null : _next,
+          child: _InsightGrid(
+            totalSpent: totalCurrentMonth,
+            daysElapsed: daysElapsed,
+            daysInMonth: daysInMonth,
+            recurringSpent: recurringSpent,
+            variableSpent: variableSpent,
+            isCurrentMonth: isCurrentCalendarMonth,
+          ),
         ),
         const SizedBox(height: 24),
         if (activeCats.isEmpty)
           _EmptyCard()
         else ...[
+          const SectionLabel(
+            'Gasto por categoría',
+            info: 'Cómo se reparte tu gasto del mes entre categorías. Toca '
+                'una porción del gráfico para resaltarla en la lista.',
+          ),
+          const SizedBox(height: 16),
           _PieSection(
             categories: activeCats,
             spentByCategory: spentByCategory,
@@ -163,7 +195,12 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
           ),
         ],
         const SizedBox(height: 32),
-        const SectionLabel('Variación vs. mes anterior'),
+        const SectionLabel(
+          'Variación vs. mes anterior',
+          info: 'Compara lo gastado en cada categoría con el mes anterior. '
+              'Una flecha hacia arriba significa que gastaste más; hacia '
+              'abajo, que gastaste menos.',
+        ),
         const SizedBox(height: 12),
         _CategoryDeltaSection(
           categories: categories,
@@ -171,18 +208,31 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
           prevSpentByCategory: prevSpentByCategory,
         ),
         const SizedBox(height: 32),
-        const SectionLabel('Gasto por día de la semana'),
+        const SectionLabel(
+          'Gasto por día de la semana',
+          info: 'Suma de lo gastado cada día de la semana durante este mes '
+              '(L = lunes … D = domingo). Sirve para ver qué días pesan más '
+              'en tu bolsillo.',
+        ),
         const SizedBox(height: 16),
         _WeekdaySection(transactions: txCurrent),
         const SizedBox(height: 32),
-        const SectionLabel('Mayores gastos del mes'),
+        const SectionLabel(
+          'Mayores gastos del mes',
+          info: 'Los 5 gastos individuales más altos del mes, de mayor a '
+              'menor.',
+        ),
         const SizedBox(height: 12),
         _TopTransactionsSection(
           transactions: txCurrent,
           categoriesById: categoriesById,
         ),
         const SizedBox(height: 32),
-        const SectionLabel('Últimos 6 meses'),
+        const SectionLabel(
+          'Últimos 6 meses',
+          info: 'Gasto total de cada uno de los 6 meses que terminan en el '
+              'mes que estás viendo. Toca una barra para ver su monto.',
+        ),
         const SizedBox(height: 16),
         _MonthBarsSection(months: months),
       ],
@@ -235,32 +285,58 @@ class _InsightGrid extends StatelessWidget {
       childAspectRatio: 2.3,
       children: [
         _StatTile(
-            label: 'PROMEDIO DIARIO', value: currencyFmt.format(avgDaily)),
+          label: 'PROMEDIO DIARIO',
+          value: currencyFmt.format(avgDaily),
+          info: isCurrentMonth
+              ? 'Cuánto gastas en promedio por día: el gasto total del mes '
+                  'dividido por los días que han pasado.'
+              : 'Cuánto gastaste en promedio por día: el gasto total del mes '
+                  'dividido por los días del mes.',
+        ),
         _StatTile(
-            label: isCurrentMonth ? 'PROYECCIÓN' : 'TOTAL DEL MES',
-            value: currencyFmt.format(projected)),
+          label: isCurrentMonth ? 'PROYECCIÓN' : 'TOTAL DEL MES',
+          value: currencyFmt.format(projected),
+          info: isCurrentMonth
+              ? 'Estimación de cuánto habrás gastado al cierre del mes si '
+                  'sigues al ritmo de tu promedio diario. Es una referencia, '
+                  'no un dato exacto.'
+              : 'Suma de todo lo que gastaste en este mes.',
+        ),
         _StatTile(
-            label: 'GASTO RECURRENTE',
-            value: '$recurringPct%',
-            sub: currencyFmt.format(recurringSpent)),
+          label: 'GASTO RECURRENTE',
+          value: '$recurringPct%',
+          sub: currencyFmt.format(recurringSpent),
+          info: 'Gastos fijos que se repiten solos cada mes, como el '
+              'arriendo o las suscripciones (los que marcaste como '
+              '"recurrentes"). El porcentaje es su peso sobre el gasto total '
+              'del mes.',
+        ),
         _StatTile(
-            label: 'GASTO VARIABLE',
-            value: '$variablePct%',
-            sub: currencyFmt.format(variableSpent)),
+          label: 'GASTO VARIABLE',
+          value: '$variablePct%',
+          sub: currencyFmt.format(variableSpent),
+          info: 'Todo lo demás: gastos del día a día que registras a mano '
+              '(comida, transporte, salidas) y que cambian de un mes a otro. '
+              'Es la parte que más puedes ajustar.',
+        ),
       ],
     );
   }
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({required this.label, required this.value, this.sub});
+  const _StatTile(
+      {required this.label, required this.value, this.sub, this.info});
   final String label;
   final String value;
   final String? sub;
 
+  /// Explicación de la métrica (hover en escritorio, toque en el teléfono).
+  final String? info;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final tile = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.paperDeep,
@@ -271,11 +347,20 @@ class _StatTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          Text(label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 9, letterSpacing: 1.0, color: AppColors.inkSoft)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 9,
+                        letterSpacing: 1.0,
+                        color: AppColors.inkSoft)),
+              ),
+              if (info != null) const InfoIcon(size: 13),
+            ],
+          ),
           const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -295,6 +380,7 @@ class _StatTile extends StatelessWidget {
         ],
       ),
     );
+    return info == null ? tile : InfoTooltip(message: info!, child: tile);
   }
 }
 
