@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/budget_alert.dart';
 import '../../core/utils/formatting.dart';
 import '../../data/local/app_database.dart';
 import 'expense_form.dart';
@@ -78,8 +79,8 @@ class EditTransactionScreen extends ConsumerWidget {
               required date,
               required note,
               required recurring,
-            }) {
-              return ref.read(transactionsRepositoryProvider).updateTransaction(
+            }) async {
+              await ref.read(transactionsRepositoryProvider).updateTransaction(
                     id: transaction.id,
                     categoryId: categoryId,
                     amount: amount,
@@ -87,6 +88,12 @@ class EditTransactionScreen extends ConsumerWidget {
                     note: note,
                     isRecurring: recurring,
                   );
+              // RF18: editar un gasto también puede dejar la categoría en 80%.
+              final alert = await checkBudgetAlert(ref,
+                  categoryId: categoryId, date: date);
+              if (alert != null && context.mounted) {
+                showBudgetAlertBanner(context, alert);
+              }
             },
           ),
         ),

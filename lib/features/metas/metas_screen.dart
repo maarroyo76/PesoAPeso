@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/ledger_paper.dart';
 import '../../data/local/app_database.dart';
@@ -77,11 +78,16 @@ Future<void> showGoalEditor(BuildContext context, WidgetRef ref,
     {SavingsGoal? goal}) async {
   final nameController = TextEditingController(text: goal?.name ?? '');
   final targetController =
-      TextEditingController(text: goal?.targetAmount.toString() ?? '');
+      TextEditingController(
+          text: goal == null ? '' : formatAmountInput(goal.targetAmount));
+
+  String? nameError;
+  String? targetError;
 
   final result = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
       backgroundColor: AppColors.paper,
       title: Text(goal == null ? 'Nueva meta' : 'Editar meta',
           style: const TextStyle(fontSize: 16, color: AppColors.ink)),
@@ -91,17 +97,23 @@ Future<void> showGoalEditor(BuildContext context, WidgetRef ref,
           TextField(
             controller: nameController,
             autofocus: true,
-            decoration: const InputDecoration(
-                labelText: 'Nombre', border: UnderlineInputBorder()),
+            maxLength: kMaxGoalNameLength,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+                labelText: 'Nombre',
+                errorText: nameError,
+                border: const UnderlineInputBorder()),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: targetController,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
+            inputFormatters: amountInputFormatters,
+            decoration: InputDecoration(
                 labelText: 'Monto objetivo',
                 prefixText: '\$ ',
-                border: UnderlineInputBorder()),
+                errorText: targetError,
+                border: const UnderlineInputBorder()),
           ),
         ],
       ),
@@ -114,10 +126,13 @@ Future<void> showGoalEditor(BuildContext context, WidgetRef ref,
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
           onPressed: () {
-            final target = int.tryParse(targetController.text);
-            if (nameController.text.trim().isEmpty ||
-                target == null ||
-                target <= 0) {
+            final target = parsePositiveAmount(targetController.text);
+            final nameEmpty = nameController.text.trim().isEmpty;
+            if (nameEmpty || target == null) {
+              setDialogState(() {
+                nameError = nameEmpty ? 'Escribe un nombre' : null;
+                targetError = target == null ? kInvalidAmountMessage : null;
+              });
               return;
             }
             Navigator.pop(ctx, true);
@@ -126,11 +141,12 @@ Future<void> showGoalEditor(BuildContext context, WidgetRef ref,
         ),
       ],
     ),
+    ),
   );
 
   if (result != true) return;
   final name = nameController.text.trim();
-  final target = int.parse(targetController.text);
+  final target = parseAmountText(targetController.text)!;
   final repo = ref.read(savingsRepositoryProvider);
   if (goal == null) {
     await repo.createGoal(name: name, targetAmount: target);

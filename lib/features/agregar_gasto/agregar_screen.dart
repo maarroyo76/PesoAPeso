@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/budget_alert.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/section_label.dart';
@@ -55,6 +57,7 @@ class AgregarScreen extends ConsumerWidget {
           date: date,
           note: qa.label,
         );
+    HapticFeedback.lightImpact();
     if (!context.mounted) return true;
     // RF18: aviso inmediato en pantalla si este gasto deja la categoría en
     // 80% o más de su presupuesto del mes.
@@ -71,6 +74,7 @@ class AgregarScreen extends ConsumerWidget {
 
     return ListView(
       padding: const EdgeInsets.all(20),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -163,8 +167,9 @@ class AgregarScreen extends ConsumerWidget {
             // categoría en 80% o más de su presupuesto del mes.
             final alert =
                 await checkBudgetAlert(ref, categoryId: categoryId, date: date);
-            if (alert != null && context.mounted)
+            if (alert != null && context.mounted) {
               showBudgetAlertBanner(context, alert);
+            }
           },
         ),
       ],
@@ -182,8 +187,11 @@ Future<void> _showQuickTemplateEditor(
 }) async {
   final labelController = TextEditingController(text: template?.label ?? '');
   final amountController =
-      TextEditingController(text: template?.amount.toString() ?? '');
+      TextEditingController(
+          text: template == null ? '' : formatAmountInput(template.amount));
   var selectedCategoryId = template?.categoryId ?? categories.first.id;
+  String? labelError;
+  String? amountError;
 
   final result = await showDialog<String>(
     context: context,
@@ -202,17 +210,23 @@ Future<void> _showQuickTemplateEditor(
               TextField(
                 controller: labelController,
                 autofocus: true,
-                decoration: const InputDecoration(
-                    labelText: 'Etiqueta', border: UnderlineInputBorder()),
+                maxLength: kMaxNameLength,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                    labelText: 'Etiqueta',
+                    errorText: labelError,
+                    border: const UnderlineInputBorder()),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
+                inputFormatters: amountInputFormatters,
+                decoration: InputDecoration(
                   labelText: 'Monto',
                   prefixText: '\$ ',
-                  border: UnderlineInputBorder(),
+                  errorText: amountError,
+                  border: const UnderlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -249,10 +263,13 @@ Future<void> _showQuickTemplateEditor(
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
             onPressed: () {
-              final amount = int.tryParse(amountController.text);
-              if (labelController.text.trim().isEmpty ||
-                  amount == null ||
-                  amount <= 0) {
+              final amount = parsePositiveAmount(amountController.text);
+              final labelEmpty = labelController.text.trim().isEmpty;
+              if (labelEmpty || amount == null) {
+                setDialogState(() {
+                  labelError = labelEmpty ? 'Escribe una etiqueta' : null;
+                  amountError = amount == null ? kInvalidAmountMessage : null;
+                });
                 return;
               }
               Navigator.pop(ctx, 'save');
@@ -269,7 +286,7 @@ Future<void> _showQuickTemplateEditor(
     await repo.delete(template.id);
   } else if (result == 'save') {
     final label = labelController.text.trim();
-    final amount = int.parse(amountController.text);
+    final amount = parseAmountText(amountController.text)!;
     if (template == null) {
       await repo.create(
           label: label, amount: amount, categoryId: selectedCategoryId);

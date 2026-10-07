@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../data/local/app_database.dart';
 import '../agregar_gasto/expense_form.dart' show ExpenseCategoryChip;
@@ -108,12 +108,14 @@ class RecurrentesScreen extends ConsumerWidget {
     required RecurringTemplate template,
   }) async {
     final amountController =
-        TextEditingController(text: template.amount.toString());
+        TextEditingController(text: formatAmountInput(template.amount));
     final noteController = TextEditingController(text: template.note);
     final dayController =
         TextEditingController(text: template.dayOfMonth.toString());
     var selectedCategoryId = template.categoryId;
     var active = template.active;
+    String? amountError;
+    String? dayError;
 
     final save = await showDialog<bool>(
       context: context,
@@ -130,23 +132,28 @@ class RecurrentesScreen extends ConsumerWidget {
                 TextField(
                   controller: amountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  inputFormatters: amountInputFormatters,
+                  decoration: InputDecoration(
                       labelText: 'Monto',
                       prefixText: '\$ ',
-                      border: UnderlineInputBorder()),
+                      errorText: amountError,
+                      border: const UnderlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: dayController,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
+                  inputFormatters: dayInputFormatters,
+                  decoration: InputDecoration(
                       labelText: 'Día del mes (1-31)',
-                      border: UnderlineInputBorder()),
+                      errorText: dayError,
+                      border: const UnderlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: noteController,
+                  maxLength: kMaxNoteLength,
+                  textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
                       labelText: 'Nota (opcional)',
                       border: UnderlineInputBorder()),
@@ -190,10 +197,16 @@ class RecurrentesScreen extends ConsumerWidget {
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
               onPressed: () {
-                final amount = int.tryParse(amountController.text);
+                final amount = parsePositiveAmount(amountController.text);
                 final day = int.tryParse(dayController.text);
-                if (amount == null || amount <= 0) return;
-                if (day == null || day < 1 || day > 31) return;
+                final dayInvalid = day == null || day < 1 || day > 31;
+                if (amount == null || dayInvalid) {
+                  setDialogState(() {
+                    amountError = amount == null ? kInvalidAmountMessage : null;
+                    dayError = dayInvalid ? 'Ingresa un día entre 1 y 31' : null;
+                  });
+                  return;
+                }
                 Navigator.pop(ctx, true);
               },
               child: const Text('Guardar'),
@@ -207,7 +220,7 @@ class RecurrentesScreen extends ConsumerWidget {
     await ref.read(recurringTemplatesRepositoryProvider).updateTemplate(
           template.id,
           categoryId: selectedCategoryId,
-          amount: int.parse(amountController.text),
+          amount: parseAmountText(amountController.text)!,
           note: noteController.text,
           dayOfMonth: int.parse(dayController.text),
           active: active,

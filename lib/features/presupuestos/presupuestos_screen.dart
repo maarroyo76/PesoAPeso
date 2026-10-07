@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/ledger_paper.dart';
 import '../../core/widgets/section_label.dart';
@@ -15,8 +15,7 @@ class PresupuestosScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final now = DateTime.now();
-    final month = DateTime(now.year, now.month);
+    final month = ref.watch(currentMonthProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
     final txAsync = ref.watch(monthTransactionsProvider(month));
     final budgets = ref.watch(monthBudgetsProvider(month));
@@ -83,7 +82,7 @@ class PresupuestosScreen extends ConsumerWidget {
 
   Future<void> _showEditTotalDialog(BuildContext context, WidgetRef ref,
       int currentTotal, DateTime month) async {
-    final controller = TextEditingController(text: currentTotal.toString());
+    final controller = TextEditingController(text: formatAmountInput(currentTotal));
 
     final result = await showDialog<int>(
       context: context,
@@ -97,7 +96,7 @@ class PresupuestosScreen extends ConsumerWidget {
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: amountInputFormatters,
           decoration: const InputDecoration(
             prefixText: '\$ ',
             border: UnderlineInputBorder(),
@@ -112,7 +111,7 @@ class PresupuestosScreen extends ConsumerWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
             onPressed: () {
-              final val = int.tryParse(controller.text);
+              final val = parseAmountText(controller.text);
               if (val != null && val >= 0) Navigator.pop(ctx, val);
             },
             child: const Text('Guardar'),
@@ -130,7 +129,7 @@ class PresupuestosScreen extends ConsumerWidget {
 
   Future<void> _showEditDialog(BuildContext context, WidgetRef ref,
       Category category, int currentBudget, DateTime month) async {
-    final controller = TextEditingController(text: currentBudget.toString());
+    final controller = TextEditingController(text: formatAmountInput(currentBudget));
 
     final result = await showDialog<int>(
       context: context,
@@ -144,7 +143,7 @@ class PresupuestosScreen extends ConsumerWidget {
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: amountInputFormatters,
           decoration: const InputDecoration(
             prefixText: '\$ ',
             border: UnderlineInputBorder(),
@@ -159,7 +158,7 @@ class PresupuestosScreen extends ConsumerWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
             onPressed: () {
-              final val = int.tryParse(controller.text);
+              final val = parseAmountText(controller.text);
               if (val != null && val >= 0) Navigator.pop(ctx, val);
             },
             child: const Text('Guardar'),

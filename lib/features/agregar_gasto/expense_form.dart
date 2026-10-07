@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../data/local/app_database.dart';
 
@@ -54,13 +56,17 @@ class ExpenseForm extends ConsumerStatefulWidget {
 
 class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   late final _amountController =
-      TextEditingController(text: widget.initialAmount?.toString() ?? '');
+      TextEditingController(
+          text: widget.initialAmount == null
+              ? ''
+              : formatAmountInput(widget.initialAmount!));
   late final _noteController = TextEditingController(text: widget.initialNote);
   String? _selectedCategoryId;
   late DateTime _selectedDate = widget.initialDate ?? DateTime.now();
   late bool _isRecurring = widget.initialRecurring;
   bool _justSubmitted = false;
   bool _submitPressed = false;
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -115,9 +121,30 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   }
 
   Future<void> _handleSubmit() async {
-    final amount = int.tryParse(_amountController.text) ?? 0;
+    if (_submitting) return;
+    final amount = parsePositiveAmount(_amountController.text);
     final categoryId = _selectedCategoryId;
-    if (amount <= 0 || categoryId == null) return;
+    if (amount == null || categoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(kInvalidAmountMessage),
+          duration: Duration(milliseconds: 1500),
+          backgroundColor: AppColors.rust,
+        ),
+      );
+      return;
+    }
+    // Guarda de reentrada: un doble toque rápido no debe guardar ni cerrar
+    // la pantalla dos veces.
+    _submitting = true;
+    try {
+      await _submit(amount, categoryId);
+    } finally {
+      _submitting = false;
+    }
+  }
+
+  Future<void> _submit(int amount, String categoryId) async {
 
     if (!widget.isEditing) {
       final confirmed = await _confirmAdd(amount, categoryId);
@@ -145,6 +172,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
       return;
     }
 
+    HapticFeedback.lightImpact();
     _amountController.clear();
     _noteController.clear();
     setState(() {
@@ -166,11 +194,18 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    // initialDate debe caer dentro de [firstDate, lastDate]: al editar un
+    // gasto antiguo (o uno restaurado de un respaldo) el rango se amplía en
+    // vez de reventar el assert del picker.
+    final defaultFirst = DateTime(now.year - 2);
+    final firstDate =
+        _selectedDate.isBefore(defaultFirst) ? _selectedDate : defaultFirst;
+    final lastDate = _selectedDate.isAfter(now) ? _selectedDate : now;
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(now.year - 2),
-      lastDate: now,
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (picked == null) return;
     setState(() {
@@ -207,7 +242,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Monto', style: _labelStyle),
+            const Text('Monto', style: _labelStyle),
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
@@ -228,6 +263,8 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                     child: TextField(
                       controller: _amountController,
                       keyboardType: TextInputType.number,
+                      inputFormatters: amountInputFormatters,
+                      textInputAction: TextInputAction.next,
                       style: appAmountTextStyle.copyWith(fontSize: 22),
                       decoration: const InputDecoration(
                         border: InputBorder.none,
@@ -238,7 +275,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                 ],
               ),
             ),
-            Text('Categoría', style: _labelStyle),
+            const Text('Categoría', style: _labelStyle),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -252,7 +289,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                   .toList(),
             ),
             const SizedBox(height: 16),
-            Text('Fecha', style: _labelStyle),
+            const Text('Fecha', style: _labelStyle),
             const SizedBox(height: 8),
             InkWell(
               onTap: _pickDate,
@@ -282,26 +319,34 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Nota (opcional)', style: _labelStyle),
+            const Text('Nota (opcional)', style: _labelStyle),
             TextField(
               controller: _noteController,
+              maxLength: kMaxNoteLength,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
               decoration: const InputDecoration(
                 border: UnderlineInputBorder(),
                 hintText: 'ej. almuerzo con equipo',
               ),
             ),
             const SizedBox(height: 16),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Gasto recurrente',
-                  style: TextStyle(fontSize: 13)),
-              subtitle: const Text('Se repite cada mes',
-                  style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
-              value: _isRecurring,
-              activeThumbColor: AppColors.green,
-              onChanged: (v) => setState(() => _isRecurring = v),
-            ),
-            const SizedBox(height: 16),
+            // Al editar no se ofrece el switch: cambiar el flag no crea ni
+            // borra la plantilla recurrente, solo desincronizaría ambos. Las
+            // plantillas se administran en "Gastos recurrentes".
+            if (!widget.isEditing) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Gasto recurrente',
+                    style: TextStyle(fontSize: 13)),
+                subtitle: const Text('Se repite cada mes',
+                    style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
+                value: _isRecurring,
+                activeThumbColor: AppColors.green,
+                onChanged: (v) => setState(() => _isRecurring = v),
+              ),
+              const SizedBox(height: 16),
+            ],
             SizedBox(
               width: double.infinity,
               child: Listener(

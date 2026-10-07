@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/ledger_paper.dart';
 import '../../core/widgets/section_label.dart';
@@ -31,8 +32,21 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
     super.dispose();
   }
 
+  void _showError(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        duration: const Duration(milliseconds: 1800),
+        backgroundColor: AppColors.rust,
+      ),
+    );
+  }
+
   Future<void> _contribute(int amount) async {
-    if (amount <= 0) return;
+    if (amount <= 0) {
+      _showError(kInvalidAmountMessage);
+      return;
+    }
     await ref.read(savingsRepositoryProvider).addContribution(
           goalId: widget.goal.id,
           amount: amount,
@@ -60,15 +74,26 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
     return (totalBudget * qa.value / 100).round();
   }
 
+  /// La meta viva desde la base (el widget solo trae una copia al abrir el
+  /// sheet, que queda vieja tras editarla).
+  SavingsGoal get _goal {
+    final goals = ref.watch(savingsGoalsProvider).valueOrNull ?? const [];
+    for (final g in goals) {
+      if (g.id == widget.goal.id) return g;
+    }
+    return widget.goal;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final goal = _goal;
     final contributionsAsync =
         ref.watch(goalContributionsProvider(widget.goal.id));
     final quickAddsAsync = ref.watch(goalQuickAddsProvider(widget.goal.id));
     final totals = ref.watch(savingsTotalsProvider).valueOrNull ?? const {};
     final contributed = totals[widget.goal.id] ?? 0;
-    final ratio = widget.goal.targetAmount > 0
-        ? (contributed / widget.goal.targetAmount).clamp(0.0, 1.0)
+    final ratio = goal.targetAmount > 0
+        ? (contributed / goal.targetAmount).clamp(0.0, 1.0)
         : 0.0;
 
     return DraggableScrollableSheet(
@@ -94,7 +119,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(widget.goal.name,
+                child: Text(goal.name,
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -104,7 +129,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
                 icon: const Icon(Icons.edit_outlined,
                     size: 20, color: AppColors.inkSoft),
                 onPressed: () =>
-                    showGoalEditor(context, ref, goal: widget.goal),
+                    showGoalEditor(context, ref, goal: goal),
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline,
@@ -128,7 +153,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
                         color: AppColors.ink)),
                 TextSpan(
                     text:
-                        ' de ${currencyFmt.format(widget.goal.targetAmount)}'),
+                        ' de ${currencyFmt.format(goal.targetAmount)}'),
               ],
             ),
           ),
@@ -158,6 +183,11 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
                               quickAdd: qa,
                               onTap: () async {
                                 final amount = await _resolveQuickAddAmount(qa);
+                                if (amount <= 0 && qa.mode == 'percent') {
+                                  _showError(
+                                      'Define primero el presupuesto total del mes en Presupuestos.');
+                                  return;
+                                }
                                 await _contribute(amount);
                               },
                               onLongPress: () =>
@@ -175,6 +205,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
                 child: TextField(
                   controller: _amountController,
                   keyboardType: TextInputType.number,
+                  inputFormatters: amountInputFormatters,
                   style: appAmountTextStyle,
                   decoration: const InputDecoration(
                     prefixText: '\$ ',
@@ -187,7 +218,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
                 onPressed: () =>
-                    _contribute(int.tryParse(_amountController.text) ?? 0),
+                    _contribute(parseAmountText(_amountController.text) ?? 0),
                 child: const Text('Aportar'),
               ),
             ],
@@ -225,7 +256,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
         title: const Text('Eliminar meta',
             style: TextStyle(fontSize: 16, color: AppColors.ink)),
         content: Text(
-          '¿Eliminar "${widget.goal.name}"? Se borrará también su historial de aportes.',
+          '¿Eliminar "${_goal.name}"? Se borrará también su historial de aportes.',
           style: const TextStyle(color: AppColors.inkSoft),
         ),
         actions: [
@@ -252,8 +283,15 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
       {SavingsQuickAdd? quickAdd}) async {
     final labelController = TextEditingController(text: quickAdd?.label ?? '');
     final valueController =
-        TextEditingController(text: quickAdd?.value.toString() ?? '');
+        TextEditingController(
+            text: quickAdd == null
+                ? ''
+                : (quickAdd.mode == 'fixed'
+                    ? formatAmountInput(quickAdd.value)
+                    : quickAdd.value.toString()));
     var mode = quickAdd?.mode ?? 'fixed';
+    String? labelError;
+    String? valueError;
 
     final result = await showDialog<String>(
       context: context,
@@ -269,8 +307,12 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
               TextField(
                 controller: labelController,
                 autofocus: true,
-                decoration: const InputDecoration(
-                    labelText: 'Etiqueta', border: UnderlineInputBorder()),
+                maxLength: kMaxNameLength,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                    labelText: 'Etiqueta',
+                    errorText: labelError,
+                    border: const UnderlineInputBorder()),
               ),
               const SizedBox(height: 12),
               SegmentedButton<String>(
@@ -286,7 +328,11 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
               TextField(
                 controller: valueController,
                 keyboardType: TextInputType.number,
+                inputFormatters: mode == 'percent'
+                    ? percentInputFormatters
+                    : amountInputFormatters,
                 decoration: InputDecoration(
+                  errorText: valueError,
                   labelText: mode == 'fixed' ? 'Monto' : 'Porcentaje',
                   prefixText: mode == 'fixed' ? '\$ ' : null,
                   suffixText: mode == 'percent' ? '%' : null,
@@ -310,10 +356,17 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
               onPressed: () {
-                final value = int.tryParse(valueController.text);
-                if (labelController.text.trim().isEmpty ||
-                    value == null ||
-                    value <= 0) {
+                final value = parsePositiveAmount(valueController.text);
+                final labelEmpty = labelController.text.trim().isEmpty;
+                final percentTooHigh =
+                    mode == 'percent' && value != null && value > 100;
+                if (labelEmpty || value == null || percentTooHigh) {
+                  setDialogState(() {
+                    labelError = labelEmpty ? 'Escribe una etiqueta' : null;
+                    valueError = value == null
+                        ? 'Ingresa un valor mayor a 0'
+                        : (percentTooHigh ? 'Máximo 100%' : null);
+                  });
                   return;
                 }
                 Navigator.pop(ctx, 'save');
@@ -330,7 +383,7 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
       await repo.deleteQuickAdd(quickAdd.id);
     } else if (result == 'save') {
       final label = labelController.text.trim();
-      final value = int.parse(valueController.text);
+      final value = parseAmountText(valueController.text)!;
       if (quickAdd == null) {
         await repo.createQuickAdd(
             goalId: widget.goal.id, label: label, mode: mode, value: value);

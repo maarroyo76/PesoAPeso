@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../data/local/app_database.dart';
@@ -141,6 +142,7 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
   var selectedIconKey =
       category?.iconKey ?? kSelectableCategoryIcons.keys.first;
   final iconEntries = kSelectableCategoryIcons.entries.toList();
+  String? nameError;
 
   final result = await showDialog<bool>(
     context: context,
@@ -159,9 +161,12 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                 TextField(
                   controller: nameController,
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  maxLength: kMaxNameLength,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
                     labelText: 'Nombre',
-                    border: UnderlineInputBorder(),
+                    errorText: nameError,
+                    border: const UnderlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -265,7 +270,17 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
             onPressed: () {
-              if (nameController.text.trim().isEmpty) return;
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              final taken = (ref.read(categoriesProvider).valueOrNull ??
+                      const <Category>[])
+                  .any((c) =>
+                      c.id != category?.id &&
+                      c.name.trim().toLowerCase() == name.toLowerCase());
+              if (taken) {
+                setDialogState(() => nameError = 'Ya existe una categoría así');
+                return;
+              }
               Navigator.pop(ctx, true);
             },
             child: const Text('Guardar'),

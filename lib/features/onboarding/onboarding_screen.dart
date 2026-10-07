@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../data/local/app_database.dart';
 import '../agregar_gasto/expense_form.dart' show ExpenseCategoryChip;
@@ -71,7 +71,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     return _categoryControllers.putIfAbsent(
       categoryId,
       () => TextEditingController(
-          text: currentValue > 0 ? currentValue.toString() : ''),
+          text: currentValue > 0 ? formatAmountInput(currentValue) : ''),
     );
   }
 
@@ -98,7 +98,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => _busy = true);
     switch (_step) {
       case 0:
-        final val = int.tryParse(_totalBudgetController.text);
+        final val = parseAmountText(_totalBudgetController.text);
         if (val != null && val >= 0) {
           await ref
               .read(categoriesRepositoryProvider)
@@ -108,7 +108,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       case 1:
         for (final c in categories) {
           final controller = _categoryControllers[c.id];
-          final val = controller == null ? null : int.tryParse(controller.text);
+          final val = controller == null ? null : parseAmountText(controller.text);
           if (val != null && val >= 0) {
             await ref
                 .read(categoriesRepositoryProvider)
@@ -118,7 +118,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         break;
       case 2:
         final name = _goalNameController.text.trim();
-        final target = int.tryParse(_goalTargetController.text);
+        final target = parseAmountText(_goalTargetController.text);
         if (name.isNotEmpty && target != null && target > 0) {
           await ref
               .read(savingsRepositoryProvider)
@@ -126,7 +126,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         }
         break;
       case 3:
-        final amount = int.tryParse(_recurringAmountController.text);
+        final amount = parseAmountText(_recurringAmountController.text);
         final day = int.tryParse(_recurringDayController.text);
         if (_recurringCategoryId != null &&
             amount != null &&
@@ -170,7 +170,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           data: (categories) {
             if (!_totalBudgetPrefilled) {
               final total = ref.read(monthTotalBudgetProvider(_currentMonth));
-              _totalBudgetController.text = total > 0 ? total.toString() : '';
+              _totalBudgetController.text =
+                  total > 0 ? formatAmountInput(total) : '';
               _totalBudgetPrefilled = true;
             }
             final budgets = ref.read(monthBudgetsProvider(_currentMonth));
@@ -353,7 +354,7 @@ class _StepTotalBudget extends StatelessWidget {
           TextField(
             controller: controller,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: amountInputFormatters,
             autofocus: true,
             style: appAmountTextStyle.copyWith(
                 fontSize: 26, fontWeight: FontWeight.w600),
@@ -414,9 +415,9 @@ class _StepCategoryBudgets extends ConsumerWidget {
           animation:
               Listenable.merge([totalBudgetController, ...categoryControllers]),
           builder: (context, _) {
-            final total = int.tryParse(totalBudgetController.text) ?? 0;
+            final total = parseAmountText(totalBudgetController.text) ?? 0;
             final assigned = categoryControllers.fold<int>(
-                0, (a, c) => a + (int.tryParse(c.text) ?? 0));
+                0, (a, c) => a + (parseAmountText(c.text) ?? 0));
             final overAllocated = total > 0 && assigned > total;
             return Container(
               padding: const EdgeInsets.all(12),
@@ -499,7 +500,7 @@ class _StepCategoryBudgets extends ConsumerWidget {
                     child: TextField(
                       controller: controllerFor(c.id),
                       keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      inputFormatters: amountInputFormatters,
                       textAlign: TextAlign.end,
                       decoration: const InputDecoration(
                         prefixText: '\$ ',
@@ -548,6 +549,8 @@ class _StepGoal extends StatelessWidget {
           const SizedBox(height: 20),
           TextField(
             controller: nameController,
+            maxLength: kMaxGoalNameLength,
+            textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
                 labelText: 'Nombre de la meta', border: UnderlineInputBorder()),
           ),
@@ -555,7 +558,7 @@ class _StepGoal extends StatelessWidget {
           TextField(
             controller: targetController,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: amountInputFormatters,
             decoration: const InputDecoration(
               labelText: 'Monto objetivo',
               prefixText: '\$ ',
@@ -601,7 +604,7 @@ class _StepRecurring extends StatelessWidget {
           TextField(
             controller: amountController,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: amountInputFormatters,
             decoration: const InputDecoration(
                 labelText: 'Monto',
                 prefixText: '\$ ',
@@ -611,7 +614,7 @@ class _StepRecurring extends StatelessWidget {
           TextField(
             controller: dayController,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: dayInputFormatters,
             decoration: const InputDecoration(
                 labelText: 'Día del mes (1-31)',
                 border: UnderlineInputBorder()),
@@ -619,6 +622,8 @@ class _StepRecurring extends StatelessWidget {
           const SizedBox(height: 16),
           TextField(
             controller: noteController,
+            maxLength: kMaxNoteLength,
+            textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
                 labelText: 'Nota (ej. Arriendo)',
                 border: UnderlineInputBorder()),
