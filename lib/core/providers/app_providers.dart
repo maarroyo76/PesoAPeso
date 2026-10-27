@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/app_database.dart';
 import '../../data/repositories/backup_repository.dart';
 import '../../data/repositories/categories_repository.dart';
+import '../../data/repositories/payment_methods_repository.dart';
 import '../../data/repositories/quick_expense_templates_repository.dart';
 import '../../data/repositories/recurring_templates_repository.dart';
 import '../../data/repositories/savings_repository.dart';
@@ -76,6 +77,14 @@ final goalContributionsProvider = StreamProvider.family((ref, int goalId) =>
 
 final goalQuickAddsProvider = StreamProvider.family((ref, int goalId) =>
     ref.watch(savingsRepositoryProvider).watchQuickAdds(goalId));
+
+final paymentMethodsRepositoryProvider = Provider<PaymentMethodsRepository>(
+  (ref) => PaymentMethodsRepository(ref.watch(appDatabaseProvider)),
+);
+
+/// RF31: métodos de pago, en el orden en que se crearon.
+final paymentMethodsProvider = StreamProvider(
+    (ref) => ref.watch(paymentMethodsRepositoryProvider).watchPaymentMethods());
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(appDatabaseProvider)),

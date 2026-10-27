@@ -10,6 +10,7 @@ import '../../core/utils/formatting.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
 import '../agregar_gasto/edit_transaction_screen.dart';
+import '../metodos_pago/payment_method_labels.dart';
 
 final _dateFmt = DateFormat('d MMM, HH:mm', 'es_CL');
 final _dayFmt = DateFormat('d MMM', 'es_CL');
@@ -31,6 +32,8 @@ class TransactionDetailSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final methodsById =
+        paymentMethodsById(ref.watch(paymentMethodsProvider).valueOrNull);
     final transactions = (ref
             .watch(monthTransactionsProvider(month))
             .valueOrNull
@@ -139,6 +142,8 @@ class TransactionDetailSheet extends ConsumerWidget {
                           final tx = transactions[i];
                           return _TxTile(
                             tx: tx,
+                            paymentLabel:
+                                transactionPaymentLabel(tx, methodsById),
                             onEdit: () async {
                               final messenger = ScaffoldMessenger.of(context);
                               // Si se eliminó desde la pantalla de edición, vuelve
@@ -177,8 +182,14 @@ class TransactionDetailSheet extends ConsumerWidget {
 
 class _TxTile extends StatelessWidget {
   const _TxTile(
-      {required this.tx, required this.onEdit, required this.onDelete});
+      {required this.tx,
+      required this.paymentLabel,
+      required this.onEdit,
+      required this.onDelete});
   final Transaction tx;
+
+  /// RF32: con qué se pagó; null si no tiene método.
+  final String? paymentLabel;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -224,9 +235,16 @@ class _TxTile extends StatelessWidget {
                         TextStyle(fontSize: 12, color: context.colors.inkSoft)),
               Row(
                 children: [
-                  Text(dateStr,
-                      style: TextStyle(
-                          fontSize: 11, color: context.colors.inkSoft)),
+                  Flexible(
+                    child: Text(
+                        paymentLabel == null
+                            ? dateStr
+                            : '$dateStr · $paymentLabel',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11, color: context.colors.inkSoft)),
+                  ),
                   if (tx.isRecurring) ...[
                     const SizedBox(width: 6),
                     Icon(Icons.repeat, size: 12, color: context.colors.inkSoft),

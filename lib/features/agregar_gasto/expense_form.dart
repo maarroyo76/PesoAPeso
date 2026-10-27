@@ -11,6 +11,8 @@ import '../../core/utils/formatting.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
+import '../metodos_pago/payment_method_labels.dart';
+import '../metodos_pago/payment_methods_screen.dart';
 
 /// Guarda el gasto. Al registrar uno nuevo devuelve cómo deshacerlo (UX01);
 /// al editar devuelve null.
@@ -20,6 +22,7 @@ typedef ExpenseFormSubmit = Future<UndoAction?> Function({
   required DateTime date,
   required String note,
   required bool recurring,
+  required int? paymentMethodId,
 });
 
 /// Formulario de monto/categoría/fecha/nota/recurrente, usado tanto para
@@ -33,6 +36,7 @@ class ExpenseForm extends ConsumerStatefulWidget {
     this.initialDate,
     this.initialNote = '',
     this.initialRecurring = false,
+    this.initialPaymentMethodId,
     this.isEditing = false,
     this.focusAmount = false,
     required this.onSubmit,
@@ -44,6 +48,7 @@ class ExpenseForm extends ConsumerStatefulWidget {
   final DateTime? initialDate;
   final String initialNote;
   final bool initialRecurring;
+  final int? initialPaymentMethodId;
 
   /// true al editar un movimiento existente: cambia textos, no resetea el
   /// formulario tras guardar (llama a [onSaved] en su lugar).
@@ -74,6 +79,8 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   String? _selectedCategoryId;
   late DateTime _selectedDate = widget.initialDate ?? DateTime.now();
   late bool _isRecurring = widget.initialRecurring;
+  late int? _selectedPaymentMethodId = widget.initialPaymentMethodId;
+  bool _userPickedPaymentMethod = false;
   bool _justSubmitted = false;
   bool _submitPressed = false;
   bool _submitting = false;
@@ -84,6 +91,9 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     _selectedCategoryId = widget.initialCategoryId;
     if (!widget.isEditing && _selectedCategoryId == null) {
       _preselectLastUsedCategory();
+    }
+    if (!widget.isEditing && _selectedPaymentMethodId == null) {
+      _preselectLastUsedPaymentMethod();
     }
     if (widget.focusAmount) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -116,6 +126,16 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   }
 
   bool _userPickedCategory = false;
+
+  /// RF32: el método del último gasto que tenía uno, salvo que el usuario ya
+  /// haya elegido otro.
+  Future<void> _preselectLastUsedPaymentMethod() async {
+    final lastId = await ref
+        .read(paymentMethodsRepositoryProvider)
+        .lastUsedPaymentMethodId();
+    if (!mounted || lastId == null || _userPickedPaymentMethod) return;
+    setState(() => _selectedPaymentMethodId = lastId);
+  }
 
   @override
   void dispose() {
@@ -171,6 +191,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
       date: _selectedDate,
       note: _noteController.text,
       recurring: _isRecurring,
+      paymentMethodId: _validPaymentMethodId(),
     );
     if (!mounted) return;
 
@@ -202,6 +223,13 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _justSubmitted = false);
     });
+  }
+
+  /// El método elegido, o null si ya no existe (se borró mientras tanto).
+  int? _validPaymentMethodId() {
+    final methods = ref.read(paymentMethodsProvider).valueOrNull ?? const [];
+    final id = _selectedPaymentMethodId;
+    return methods.any((m) => m.id == id) ? id : null;
   }
 
   Future<void> _pickDate() async {
@@ -336,6 +364,16 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 16),
+            Text('Pagado con', style: _labelStyle),
+            const SizedBox(height: 8),
+            _PaymentMethodPicker(
+              selectedId: _selectedPaymentMethodId,
+              onSelected: (id) => setState(() {
+                _selectedPaymentMethodId = id;
+                _userPickedPaymentMethod = true;
+              }),
             ),
             const SizedBox(height: 16),
             Text('Nota (opcional)', style: _labelStyle),
@@ -494,6 +532,60 @@ class ExpenseCategoryChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// RF32: selector de método de pago. "Sin especificar" siempre está, para
+/// no obligar a elegir; sin métodos creados, ofrece crear el primero.
+class _PaymentMethodPicker extends ConsumerWidget {
+  const _PaymentMethodPicker(
+      {required this.selectedId, required this.onSelected});
+  final int? selectedId;
+  final ValueChanged<int?> onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final methods = ref.watch(paymentMethodsProvider).valueOrNull ?? const [];
+    if (methods.isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          style: TextButton.styleFrom(
+            foregroundColor: context.colors.ink,
+            padding: EdgeInsets.zero,
+          ),
+          onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PaymentMethodsScreen())),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Agregar un método de pago',
+              style: TextStyle(fontSize: 13)),
+        ),
+      );
+    }
+    // Un id que ya no existe se muestra como "Sin especificar".
+    final effective =
+        methods.any((m) => m.id == selectedId) ? selectedId : null;
+    Widget chip(String label, int? id, {Color? color, IconData? icon}) =>
+        ChoiceChip(
+          label: Text(label),
+          avatar: icon == null
+              ? null
+              : Icon(icon, size: 16, color: color ?? context.colors.inkSoft),
+          selected: effective == id,
+          showCheckmark: false,
+          onSelected: (_) => onSelected(id),
+        );
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final m in methods)
+          chip(paymentMethodLabel(m), m.id,
+              color: context.colors.category(m.colorValue),
+              icon: paymentKindIcon(m.kind)),
+        chip(kNoPaymentMethodLabel, null),
+      ],
     );
   }
 }

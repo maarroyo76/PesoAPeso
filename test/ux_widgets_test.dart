@@ -32,6 +32,8 @@ void main() {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
         monthTransactionsProvider
             .overrideWith((ref, month) => Stream.value(<Transaction>[])),

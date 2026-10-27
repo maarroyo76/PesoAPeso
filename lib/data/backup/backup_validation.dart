@@ -1,6 +1,9 @@
 /// Versión del formato que escribe `exportAllData`. Subirla al cambiar el
 /// formato de forma incompatible; un respaldo con versión mayor la rechaza.
-const kBackupFormatVersion = 1;
+///
+/// v2 (RNF19): agrega `paymentMethods` y `transactions.paymentMethodId`.
+/// Los respaldos v1 se siguen aceptando: sus gastos quedan sin método.
+const kBackupFormatVersion = 2;
 
 /// Tamaño máximo aceptado para un archivo de respaldo (un respaldo real pesa
 /// unos pocos MB incluso con años de gastos).
@@ -54,6 +57,7 @@ void validateBackupData(Object? decoded) {
     'monthlyBudgets',
     'quickExpenseTemplates',
     'monthlyAdjustments',
+    'paymentMethods',
     'appSettings',
   ];
 
@@ -84,6 +88,9 @@ void validateBackupData(Object? decoded) {
   final templateIds = {
     for (final r in rows('recurringTemplates', mustExist: true)) r['id']
   };
+  final paymentMethodIds = {
+    for (final r in rows('paymentMethods', mustExist: false)) r['id']
+  };
 
   void checkRefs(String table, String column, Set<Object?> valid,
       {bool nullable = false}) {
@@ -104,4 +111,6 @@ void validateBackupData(Object? decoded) {
   checkRefs('savingsQuickAdds', 'goalId', goalIds);
   checkRefs('transactions', 'recurringTemplateId', templateIds, nullable: true);
   checkRefs('monthlyAdjustments', 'categoryId', categoryIds, nullable: true);
+  checkRefs('transactions', 'paymentMethodId', paymentMethodIds,
+      nullable: true);
 }

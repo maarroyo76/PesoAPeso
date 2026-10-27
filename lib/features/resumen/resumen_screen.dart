@@ -15,6 +15,7 @@ import '../../core/widgets/month_swipe.dart';
 import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
+import '../metodos_pago/payment_method_labels.dart';
 import 'transaction_detail_sheet.dart';
 
 class ResumenScreen extends ConsumerStatefulWidget {
@@ -126,6 +127,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
       int? prevSpent,
       int saved) {
     final categoriesById = {for (final c in categories) c.id: c};
+    final methodsById =
+        paymentMethodsById(ref.watch(paymentMethodsProvider).valueOrNull);
     final spentByCategory = <String, int>{};
     for (final t in transactions) {
       spentByCategory[t.categoryId] =
@@ -192,6 +195,7 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
           // respaldo inconsistente) para no romper toda la pantalla.
           ...recent.map((t) => _RecentTxRow(
                 tx: t,
+                paymentLabel: transactionPaymentLabel(t, methodsById),
                 category: categoriesById[t.categoryId]!,
                 onTap: () =>
                     _showDetail(categoriesById[t.categoryId]!, transactions),
@@ -239,11 +243,15 @@ String _formatRecentDate(Transaction tx) {
 class _RecentTxRow extends StatelessWidget {
   const _RecentTxRow({
     required this.tx,
+    required this.paymentLabel,
     required this.category,
     required this.onTap,
   });
   final Transaction tx;
   final Category category;
+
+  /// RF32: con qué se pagó; null si no tiene método.
+  final String? paymentLabel;
   final VoidCallback onTap;
 
   @override
@@ -295,10 +303,16 @@ class _RecentTxRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Text(
-                          _formatRecentDate(tx),
-                          style: TextStyle(
-                              fontSize: 11, color: context.colors.inkSoft),
+                        Flexible(
+                          child: Text(
+                            paymentLabel == null
+                                ? _formatRecentDate(tx)
+                                : '${_formatRecentDate(tx)} · $paymentLabel',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11, color: context.colors.inkSoft),
+                          ),
                         ),
                         if (tx.isRecurring) ...[
                           const SizedBox(width: 6),

@@ -22,6 +22,8 @@ class TransactionsRepository {
     required DateTime date,
     String note = '',
     bool isRecurring = false,
+    // Requerido aunque sea nullable: omitirlo borraría el método del gasto.
+    required int? paymentMethodId,
   }) {
     return _db.updateTransaction(
       id: id,
@@ -30,6 +32,7 @@ class TransactionsRepository {
       date: date,
       note: note,
       isRecurring: isRecurring,
+      paymentMethodId: paymentMethodId,
     );
   }
 
@@ -41,6 +44,7 @@ class TransactionsRepository {
     String note = '',
     bool isRecurring = false,
     int? recurringTemplateId,
+    int? paymentMethodId,
   }) {
     return _db.into(_db.transactions).insert(
           TransactionsCompanion.insert(
@@ -50,6 +54,7 @@ class TransactionsRepository {
             note: Value(note),
             isRecurring: Value(isRecurring),
             recurringTemplateId: Value(recurringTemplateId),
+            paymentMethodId: Value(paymentMethodId),
           ),
         );
   }

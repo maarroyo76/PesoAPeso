@@ -30,12 +30,19 @@ class AgregarScreen extends ConsumerWidget {
     final date = DateTime.now();
     final txRepo = ref.read(transactionsRepositoryProvider);
     final int id;
+    final int? paymentMethodId;
     try {
+      // RF32: el acceso rápido sigue siendo de un toque; usa el último método
+      // de pago y se puede cambiar desde el detalle del gasto.
+      paymentMethodId = await ref
+          .read(paymentMethodsRepositoryProvider)
+          .lastUsedPaymentMethodId();
       id = await txRepo.addTransaction(
         categoryId: qa.categoryId,
         amount: qa.amount,
         date: date,
         note: qa.label,
+        paymentMethodId: paymentMethodId,
       );
     } catch (e) {
       // UX09: mensaje para el usuario en vez del error técnico.
@@ -62,6 +69,7 @@ class AgregarScreen extends ConsumerWidget {
         amount: qa.amount * n,
         date: date,
         note: quickAddNote(qa.label, n),
+        paymentMethodId: paymentMethodId,
       );
       HapticFeedback.selectionClick();
       final alerts =
@@ -211,6 +219,7 @@ class AgregarScreen extends ConsumerWidget {
             required date,
             required note,
             required recurring,
+            required paymentMethodId,
           }) async {
             final txRepo = ref.read(transactionsRepositoryProvider);
             final templatesRepo =
@@ -234,6 +243,7 @@ class AgregarScreen extends ConsumerWidget {
               note: note,
               isRecurring: recurring,
               recurringTemplateId: templateId,
+              paymentMethodId: paymentMethodId,
             );
             Future<void> undo() async {
               await txRepo.deleteTransaction(id);

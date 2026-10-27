@@ -54,6 +54,7 @@ class EditTransactionScreen extends ConsumerWidget {
                 initialDate: transaction.date,
                 initialNote: transaction.note,
                 initialRecurring: transaction.isRecurring,
+                initialPaymentMethodId: transaction.paymentMethodId,
                 onSaved: () => Navigator.of(context).pop(),
                 onSubmit: ({
                   required categoryId,
@@ -61,6 +62,7 @@ class EditTransactionScreen extends ConsumerWidget {
                   required date,
                   required note,
                   required recurring,
+                  required paymentMethodId,
                 }) async {
                   await ref
                       .read(transactionsRepositoryProvider)
@@ -71,6 +73,7 @@ class EditTransactionScreen extends ConsumerWidget {
                         date: date,
                         note: note,
                         isRecurring: recurring,
+                        paymentMethodId: paymentMethodId,
                       );
                   // RF18/RF55: editar un gasto también puede dejar la
                   // categoría o el total en 80%.

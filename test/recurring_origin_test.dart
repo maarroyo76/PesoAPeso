@@ -42,6 +42,8 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
         recurringTemplatesProvider
             .overrideWith((ref) => Stream.value([template])),
       ],

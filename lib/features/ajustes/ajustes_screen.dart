@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../categorias/categorias_screen.dart';
 import '../escaner/prueba_boletas_screen.dart';
+import '../metodos_pago/payment_methods_screen.dart';
 import '../recurrentes/recurrentes_screen.dart';
 import '../respaldo/respaldo_screen.dart';
 
-/// UX05: Categorías, Recurrentes y Respaldo con nombre visible. Antes eran
+/// UX05: Categorías, Métodos de pago, Recurrentes y Respaldo con nombre
+/// visible. Antes eran
 /// tres íconos sin texto en la barra superior, reconocibles solo con
 /// pulsación larga.
 class AjustesScreen extends StatelessWidget {
@@ -26,6 +28,13 @@ class AjustesScreen extends StatelessWidget {
             title: 'Categorías',
             subtitle: 'Crear, editar y elegir ícono y color',
             screen: CategoriasScreen(),
+          ),
+          Divider(height: 1, indent: 72),
+          _SettingsTile(
+            icon: Icons.credit_card,
+            title: 'Métodos de pago',
+            subtitle: 'Efectivo, débito y tarjetas de crédito',
+            screen: PaymentMethodsScreen(),
           ),
           Divider(height: 1, indent: 72),
           _SettingsTile(

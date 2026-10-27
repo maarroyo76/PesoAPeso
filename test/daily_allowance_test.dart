@@ -68,6 +68,8 @@ void main() {
       await tester.pumpWidget(ProviderScope(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
+          paymentMethodsProvider
+              .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
           categoriesProvider.overrideWith((ref) => Stream.value([category])),
           monthTransactionsProvider.overrideWith((ref, m) => Stream.value([
                 if (m == month)

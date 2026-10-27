@@ -62,6 +62,8 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         categoriesProvider.overrideWith((ref) => Stream.value(categories)),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
         quickExpenseTemplatesProvider
             .overrideWith((ref) => Stream.value([quick])),
       ],
@@ -184,6 +186,8 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         categoriesProvider.overrideWith((ref) => Stream.value(categories)),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
         quickExpenseTemplatesProvider
             .overrideWith((ref) => Stream.value([quick])),
       ],

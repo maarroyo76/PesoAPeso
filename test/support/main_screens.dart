@@ -16,6 +16,7 @@ import 'package:peso_a_peso/features/agregar_gasto/agregar_screen.dart';
 import 'package:peso_a_peso/features/ajustes/ajustes_screen.dart';
 import 'package:peso_a_peso/features/categorias/categorias_screen.dart';
 import 'package:peso_a_peso/features/estadisticas/estadisticas_screen.dart';
+import 'package:peso_a_peso/features/metodos_pago/payment_methods_screen.dart';
 import 'package:peso_a_peso/features/metas/metas_screen.dart';
 import 'package:peso_a_peso/features/presupuestos/presupuestos_screen.dart';
 import 'package:peso_a_peso/features/recurrentes/recurrentes_screen.dart';
@@ -38,6 +39,7 @@ const mainScreens = [
   ('Categorías', CategoriasScreen()),
   ('Recurrentes', RecurrentesScreen()),
   ('Respaldo', RespaldoScreen()),
+  ('Métodos de pago', PaymentMethodsScreen()),
 ];
 
 const categories = [
@@ -68,6 +70,7 @@ List<Transaction> txsFor(DateTime m) => [
           date: DateTime(m.year, m.month, 1 + i, 13, 5),
           note: i.isEven ? 'Almuerzo con el equipo de trabajo' : '',
           isRecurring: i == 5,
+          paymentMethodId: i == 4 ? 1 : null,
         ),
     ];
 final budgets = [
@@ -83,6 +86,18 @@ const quick = [
       id: 1, label: 'Café', amount: 2500, categoryId: 'alimentacion'),
   QuickExpenseTemplate(
       id: 2, label: 'Micro/Metro', amount: 790, categoryId: 'transporte'),
+];
+
+const paymentMethods = [
+  PaymentMethod(
+      id: 1,
+      alias: 'CMR',
+      kind: 'credit',
+      colorValue: 0xFF3B6B78,
+      last4: '1234',
+      billingDay: 20,
+      dueDay: 5),
+  PaymentMethod(id: 2, alias: 'Efectivo', kind: 'cash', colorValue: 0xFF2F6F4E),
 ];
 
 const recurring = [
@@ -130,6 +145,8 @@ Future<Future<void> Function()> pumpMainScreen(
       savingsGoalsProvider.overrideWith((ref) => Stream.value(goals)),
       savingsTotalsProvider.overrideWith((ref) => Stream.value({1: 450000})),
       monthContributedProvider.overrideWith((ref, m) => Stream.value(30000)),
+      paymentMethodsProvider
+          .overrideWith((ref) => Stream.value(paymentMethods)),
       quickExpenseTemplatesProvider.overrideWith((ref) => Stream.value(quick)),
       recurringTemplatesProvider.overrideWith((ref) => Stream.value(recurring)),
     ],

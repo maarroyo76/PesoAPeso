@@ -29,6 +29,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -44,6 +46,7 @@ void main() {
                 required date,
                 required note,
                 required recurring,
+                required paymentMethodId,
               }) async =>
                   null,
             ),
@@ -70,6 +73,8 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -82,6 +87,7 @@ void main() {
                 required date,
                 required note,
                 required recurring,
+                required paymentMethodId,
               }) async {
                 onSubmit();
                 return null;

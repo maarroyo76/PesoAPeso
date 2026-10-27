@@ -63,6 +63,36 @@ class MonthlyBudgets extends Table {
   Set<Column> get primaryKey => {year, month};
 }
 
+/// Tipos de método de pago (columna `PaymentMethods.kind`).
+const kPaymentKindCash = 'cash';
+const kPaymentKindDebit = 'debit';
+const kPaymentKindCredit = 'credit';
+const kPaymentKinds = [kPaymentKindCash, kPaymentKindDebit, kPaymentKindCredit];
+
+/// RF31: método de pago con alias ("CMR", "Débito Santander"). RNF16: nunca
+/// se guarda el número completo, el CVV ni el vencimiento; a lo más los
+/// últimos 4 dígitos. Los días de facturación y de pago (RF33) solo tienen
+/// sentido en crédito.
+class PaymentMethods extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get alias => text()();
+  TextColumn get kind => text()();
+  IntColumn get colorValue => integer()();
+  TextColumn get last4 => text().nullable()();
+  IntColumn get billingDay => integer().nullable()();
+  IntColumn get dueDay => integer().nullable()();
+
+  @override
+  List<String> get customConstraints => [
+        "CHECK (kind IN ('cash', 'debit', 'credit'))",
+        // RNF16: también se valida en la base, no solo en el formulario.
+        "CHECK (last4 IS NULL OR (length(last4) BETWEEN 1 AND 4 "
+            "AND last4 NOT GLOB '*[^0-9]*'))",
+        'CHECK (billing_day IS NULL OR billing_day BETWEEN 1 AND 31)',
+        'CHECK (due_day IS NULL OR due_day BETWEEN 1 AND 31)',
+      ];
+}
+
 class Transactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get categoryId => text()();
@@ -76,11 +106,16 @@ class Transactions extends Table {
   /// que no se pudieron enlazar, y si la plantilla se eliminó.
   IntColumn get recurringTemplateId => integer().nullable()();
 
+  /// RF32: con qué se pagó. Null = "Sin especificar": todos los gastos
+  /// anteriores a v10 (RNF18) y los que el usuario no asignó.
+  IntColumn get paymentMethodId => integer().nullable()();
+
   @override
   List<String> get customConstraints => [
         'FOREIGN KEY (category_id) REFERENCES categories (id)',
         'FOREIGN KEY (recurring_template_id) REFERENCES recurring_templates (id) '
             'ON DELETE SET NULL',
+        'FOREIGN KEY (payment_method_id) REFERENCES payment_methods (id)',
       ];
 }
 
@@ -220,6 +255,7 @@ final _defaultQuickExpenseTemplatesForNewInstall = [
   MonthlyBudgets,
   QuickExpenseTemplates,
   MonthlyAdjustments,
+  PaymentMethods,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openDatabaseConnection());
@@ -228,7 +264,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -412,9 +448,13 @@ class AppDatabase extends _$AppDatabase {
             await m.alterTable(TableMigration(categoryBudgets));
             // ignore: experimental_member_use
             await m.alterTable(TableMigration(recurringTemplates));
+            // `alterTable` crea la tabla con el esquema ACTUAL, así que
+            // también trae la columna de v10; queda en null igual que allá.
             // ignore: experimental_member_use
-            await m.alterTable(TableMigration(transactions,
-                newColumns: [transactions.recurringTemplateId]));
+            await m.alterTable(TableMigration(transactions, newColumns: [
+              transactions.recurringTemplateId,
+              transactions.paymentMethodId,
+            ]));
             // ignore: experimental_member_use
             await m.alterTable(TableMigration(quickExpenseTemplates));
             // ignore: experimental_member_use
@@ -437,6 +477,20 @@ class AppDatabase extends _$AppDatabase {
                   AND rt.note = transactions.note) = 1
             ''');
           }
+          if (from < 10) {
+            // RF31/RF32: métodos de pago. RNF18: los gastos existentes no
+            // cambian; quedan con método null ("Sin especificar"), sin
+            // inventarles un efectivo que el usuario nunca registró.
+            await m.createTable(paymentMethods);
+            // Si pasamos por `from < 9`, la tabla ya se reconstruyó con la
+            // columna (ver arriba). La clave foránea es de tabla, así que hay
+            // que reconstruirla: `addColumn` agregaría la columna sin ella.
+            if (from >= 9) {
+              // ignore: experimental_member_use
+              await m.alterTable(TableMigration(transactions,
+                  newColumns: [transactions.paymentMethodId]));
+            }
+          }
         },
       );
 
@@ -458,6 +512,7 @@ class AppDatabase extends _$AppDatabase {
     required DateTime date,
     required String note,
     required bool isRecurring,
+    required int? paymentMethodId,
   }) {
     return (update(transactions)..where((t) => t.id.equals(id))).write(
       TransactionsCompanion(
@@ -466,8 +521,40 @@ class AppDatabase extends _$AppDatabase {
         date: Value(date),
         note: Value(note),
         isRecurring: Value(isRecurring),
+        paymentMethodId: Value(paymentMethodId),
       ),
     );
+  }
+
+  // --- Métodos de pago (RF31/RF32) -----------------------------------------
+
+  Stream<List<PaymentMethod>> watchPaymentMethods() =>
+      (select(paymentMethods)..orderBy([(p) => OrderingTerm.asc(p.id)]))
+          .watch();
+
+  Future<int> insertPaymentMethod(PaymentMethodsCompanion method) =>
+      into(paymentMethods).insert(method);
+
+  Future<void> updatePaymentMethod(int id, PaymentMethodsCompanion method) =>
+      (update(paymentMethods)..where((p) => p.id.equals(id))).write(method);
+
+  Future<int> countTransactionsForPaymentMethod(int id) =>
+      _countWhere(transactions, transactions.paymentMethodId.equals(id));
+
+  /// RF31: como con las categorías, la UI solo lo permite sin gastos
+  /// asociados; la clave foránea lo impide igual si se intentara.
+  Future<void> deletePaymentMethod(int id) =>
+      (delete(paymentMethods)..where((p) => p.id.equals(id))).go();
+
+  /// RF32: método del último gasto registrado que tiene uno, para
+  /// proponerlo por defecto. Null si nunca se usó uno.
+  Future<int?> lastUsedPaymentMethodId() async {
+    final last = await (select(transactions)
+          ..where((t) => t.paymentMethodId.isNotNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.id)])
+          ..limit(1))
+        .getSingleOrNull();
+    return last?.paymentMethodId;
   }
 
   /// Streams para que la UI se actualice sola cuando cambian los datos.
@@ -900,6 +987,8 @@ class AppDatabase extends _$AppDatabase {
       'monthlyAdjustments': (await select(monthlyAdjustments).get())
           .map((r) => r.toJson())
           .toList(),
+      'paymentMethods':
+          (await select(paymentMethods).get()).map((r) => r.toJson()).toList(),
       'appSettings':
           (await select(appSettings).get()).map((r) => r.toJson()).toList(),
     };
@@ -915,6 +1004,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(savingsContributions).go();
       await delete(savingsGoals).go();
       await delete(transactions).go();
+      await delete(paymentMethods).go();
       await delete(recurringTemplates).go();
       await delete(quickExpenseTemplates).go();
       await delete(monthlyAdjustments).go();
@@ -950,7 +1040,14 @@ class AppDatabase extends _$AppDatabase {
         await into(monthlyAdjustments).insertOnConflictUpdate(
             MonthlyAdjustment.fromJson(row).toCompanion(false));
       }
-      // Plantillas antes que gastos: un gasto puede apuntar a su plantilla.
+      // `?? []`: respaldos v1 no traen métodos de pago (RNF19); sus gastos
+      // tampoco traen `paymentMethodId` y quedan como "Sin especificar".
+      for (final row in (data['paymentMethods'] as List? ?? [])
+          .cast<Map<String, dynamic>>()) {
+        await into(paymentMethods).insertOnConflictUpdate(
+            PaymentMethod.fromJson(row).toCompanion(false));
+      }
+      // Plantillas y métodos antes que gastos: un gasto apunta a ambos.
       for (final row in (data['recurringTemplates'] as List)
           .cast<Map<String, dynamic>>()) {
         await into(recurringTemplates).insertOnConflictUpdate(

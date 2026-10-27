@@ -937,6 +937,383 @@ class RecurringTemplatesCompanion extends UpdateCompanion<RecurringTemplate> {
   }
 }
 
+class $PaymentMethodsTable extends PaymentMethods
+    with TableInfo<$PaymentMethodsTable, PaymentMethod> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PaymentMethodsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _aliasMeta = const VerificationMeta('alias');
+  @override
+  late final GeneratedColumn<String> alias = GeneratedColumn<String>(
+      'alias', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+      'kind', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _colorValueMeta =
+      const VerificationMeta('colorValue');
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+      'color_value', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _last4Meta = const VerificationMeta('last4');
+  @override
+  late final GeneratedColumn<String> last4 = GeneratedColumn<String>(
+      'last4', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _billingDayMeta =
+      const VerificationMeta('billingDay');
+  @override
+  late final GeneratedColumn<int> billingDay = GeneratedColumn<int>(
+      'billing_day', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _dueDayMeta = const VerificationMeta('dueDay');
+  @override
+  late final GeneratedColumn<int> dueDay = GeneratedColumn<int>(
+      'due_day', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, alias, kind, colorValue, last4, billingDay, dueDay];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'payment_methods';
+  @override
+  VerificationContext validateIntegrity(Insertable<PaymentMethod> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('alias')) {
+      context.handle(
+          _aliasMeta, alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta));
+    } else if (isInserting) {
+      context.missing(_aliasMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+          _kindMeta, kind.isAcceptableOrUnknown(data['kind']!, _kindMeta));
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+          _colorValueMeta,
+          colorValue.isAcceptableOrUnknown(
+              data['color_value']!, _colorValueMeta));
+    } else if (isInserting) {
+      context.missing(_colorValueMeta);
+    }
+    if (data.containsKey('last4')) {
+      context.handle(
+          _last4Meta, last4.isAcceptableOrUnknown(data['last4']!, _last4Meta));
+    }
+    if (data.containsKey('billing_day')) {
+      context.handle(
+          _billingDayMeta,
+          billingDay.isAcceptableOrUnknown(
+              data['billing_day']!, _billingDayMeta));
+    }
+    if (data.containsKey('due_day')) {
+      context.handle(_dueDayMeta,
+          dueDay.isAcceptableOrUnknown(data['due_day']!, _dueDayMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PaymentMethod map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PaymentMethod(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      alias: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}alias'])!,
+      kind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kind'])!,
+      colorValue: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}color_value'])!,
+      last4: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}last4']),
+      billingDay: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}billing_day']),
+      dueDay: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}due_day']),
+    );
+  }
+
+  @override
+  $PaymentMethodsTable createAlias(String alias) {
+    return $PaymentMethodsTable(attachedDatabase, alias);
+  }
+}
+
+class PaymentMethod extends DataClass implements Insertable<PaymentMethod> {
+  final int id;
+  final String alias;
+  final String kind;
+  final int colorValue;
+  final String? last4;
+  final int? billingDay;
+  final int? dueDay;
+  const PaymentMethod(
+      {required this.id,
+      required this.alias,
+      required this.kind,
+      required this.colorValue,
+      this.last4,
+      this.billingDay,
+      this.dueDay});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['alias'] = Variable<String>(alias);
+    map['kind'] = Variable<String>(kind);
+    map['color_value'] = Variable<int>(colorValue);
+    if (!nullToAbsent || last4 != null) {
+      map['last4'] = Variable<String>(last4);
+    }
+    if (!nullToAbsent || billingDay != null) {
+      map['billing_day'] = Variable<int>(billingDay);
+    }
+    if (!nullToAbsent || dueDay != null) {
+      map['due_day'] = Variable<int>(dueDay);
+    }
+    return map;
+  }
+
+  PaymentMethodsCompanion toCompanion(bool nullToAbsent) {
+    return PaymentMethodsCompanion(
+      id: Value(id),
+      alias: Value(alias),
+      kind: Value(kind),
+      colorValue: Value(colorValue),
+      last4:
+          last4 == null && nullToAbsent ? const Value.absent() : Value(last4),
+      billingDay: billingDay == null && nullToAbsent
+          ? const Value.absent()
+          : Value(billingDay),
+      dueDay:
+          dueDay == null && nullToAbsent ? const Value.absent() : Value(dueDay),
+    );
+  }
+
+  factory PaymentMethod.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PaymentMethod(
+      id: serializer.fromJson<int>(json['id']),
+      alias: serializer.fromJson<String>(json['alias']),
+      kind: serializer.fromJson<String>(json['kind']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      last4: serializer.fromJson<String?>(json['last4']),
+      billingDay: serializer.fromJson<int?>(json['billingDay']),
+      dueDay: serializer.fromJson<int?>(json['dueDay']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'alias': serializer.toJson<String>(alias),
+      'kind': serializer.toJson<String>(kind),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'last4': serializer.toJson<String?>(last4),
+      'billingDay': serializer.toJson<int?>(billingDay),
+      'dueDay': serializer.toJson<int?>(dueDay),
+    };
+  }
+
+  PaymentMethod copyWith(
+          {int? id,
+          String? alias,
+          String? kind,
+          int? colorValue,
+          Value<String?> last4 = const Value.absent(),
+          Value<int?> billingDay = const Value.absent(),
+          Value<int?> dueDay = const Value.absent()}) =>
+      PaymentMethod(
+        id: id ?? this.id,
+        alias: alias ?? this.alias,
+        kind: kind ?? this.kind,
+        colorValue: colorValue ?? this.colorValue,
+        last4: last4.present ? last4.value : this.last4,
+        billingDay: billingDay.present ? billingDay.value : this.billingDay,
+        dueDay: dueDay.present ? dueDay.value : this.dueDay,
+      );
+  PaymentMethod copyWithCompanion(PaymentMethodsCompanion data) {
+    return PaymentMethod(
+      id: data.id.present ? data.id.value : this.id,
+      alias: data.alias.present ? data.alias.value : this.alias,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      colorValue:
+          data.colorValue.present ? data.colorValue.value : this.colorValue,
+      last4: data.last4.present ? data.last4.value : this.last4,
+      billingDay:
+          data.billingDay.present ? data.billingDay.value : this.billingDay,
+      dueDay: data.dueDay.present ? data.dueDay.value : this.dueDay,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentMethod(')
+          ..write('id: $id, ')
+          ..write('alias: $alias, ')
+          ..write('kind: $kind, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('last4: $last4, ')
+          ..write('billingDay: $billingDay, ')
+          ..write('dueDay: $dueDay')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, alias, kind, colorValue, last4, billingDay, dueDay);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PaymentMethod &&
+          other.id == this.id &&
+          other.alias == this.alias &&
+          other.kind == this.kind &&
+          other.colorValue == this.colorValue &&
+          other.last4 == this.last4 &&
+          other.billingDay == this.billingDay &&
+          other.dueDay == this.dueDay);
+}
+
+class PaymentMethodsCompanion extends UpdateCompanion<PaymentMethod> {
+  final Value<int> id;
+  final Value<String> alias;
+  final Value<String> kind;
+  final Value<int> colorValue;
+  final Value<String?> last4;
+  final Value<int?> billingDay;
+  final Value<int?> dueDay;
+  const PaymentMethodsCompanion({
+    this.id = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.last4 = const Value.absent(),
+    this.billingDay = const Value.absent(),
+    this.dueDay = const Value.absent(),
+  });
+  PaymentMethodsCompanion.insert({
+    this.id = const Value.absent(),
+    required String alias,
+    required String kind,
+    required int colorValue,
+    this.last4 = const Value.absent(),
+    this.billingDay = const Value.absent(),
+    this.dueDay = const Value.absent(),
+  })  : alias = Value(alias),
+        kind = Value(kind),
+        colorValue = Value(colorValue);
+  static Insertable<PaymentMethod> custom({
+    Expression<int>? id,
+    Expression<String>? alias,
+    Expression<String>? kind,
+    Expression<int>? colorValue,
+    Expression<String>? last4,
+    Expression<int>? billingDay,
+    Expression<int>? dueDay,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (alias != null) 'alias': alias,
+      if (kind != null) 'kind': kind,
+      if (colorValue != null) 'color_value': colorValue,
+      if (last4 != null) 'last4': last4,
+      if (billingDay != null) 'billing_day': billingDay,
+      if (dueDay != null) 'due_day': dueDay,
+    });
+  }
+
+  PaymentMethodsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? alias,
+      Value<String>? kind,
+      Value<int>? colorValue,
+      Value<String?>? last4,
+      Value<int?>? billingDay,
+      Value<int?>? dueDay}) {
+    return PaymentMethodsCompanion(
+      id: id ?? this.id,
+      alias: alias ?? this.alias,
+      kind: kind ?? this.kind,
+      colorValue: colorValue ?? this.colorValue,
+      last4: last4 ?? this.last4,
+      billingDay: billingDay ?? this.billingDay,
+      dueDay: dueDay ?? this.dueDay,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (alias.present) {
+      map['alias'] = Variable<String>(alias.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (last4.present) {
+      map['last4'] = Variable<String>(last4.value);
+    }
+    if (billingDay.present) {
+      map['billing_day'] = Variable<int>(billingDay.value);
+    }
+    if (dueDay.present) {
+      map['due_day'] = Variable<int>(dueDay.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentMethodsCompanion(')
+          ..write('id: $id, ')
+          ..write('alias: $alias, ')
+          ..write('kind: $kind, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('last4: $last4, ')
+          ..write('billingDay: $billingDay, ')
+          ..write('dueDay: $dueDay')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TransactionsTable extends Transactions
     with TableInfo<$TransactionsTable, Transaction> {
   @override
@@ -991,9 +1368,23 @@ class $TransactionsTable extends Transactions
   late final GeneratedColumn<int> recurringTemplateId = GeneratedColumn<int>(
       'recurring_template_id', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _paymentMethodIdMeta =
+      const VerificationMeta('paymentMethodId');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, categoryId, amount, date, note, isRecurring, recurringTemplateId];
+  late final GeneratedColumn<int> paymentMethodId = GeneratedColumn<int>(
+      'payment_method_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        categoryId,
+        amount,
+        date,
+        note,
+        isRecurring,
+        recurringTemplateId,
+        paymentMethodId
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1043,6 +1434,12 @@ class $TransactionsTable extends Transactions
           recurringTemplateId.isAcceptableOrUnknown(
               data['recurring_template_id']!, _recurringTemplateIdMeta));
     }
+    if (data.containsKey('payment_method_id')) {
+      context.handle(
+          _paymentMethodIdMeta,
+          paymentMethodId.isAcceptableOrUnknown(
+              data['payment_method_id']!, _paymentMethodIdMeta));
+    }
     return context;
   }
 
@@ -1066,6 +1463,8 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.bool, data['${effectivePrefix}is_recurring'])!,
       recurringTemplateId: attachedDatabase.typeMapping.read(
           DriftSqlType.int, data['${effectivePrefix}recurring_template_id']),
+      paymentMethodId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}payment_method_id']),
     );
   }
 
@@ -1087,6 +1486,10 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   /// gasto a su recurrente. Null en gastos manuales, en los anteriores a v9
   /// que no se pudieron enlazar, y si la plantilla se eliminó.
   final int? recurringTemplateId;
+
+  /// RF32: con qué se pagó. Null = "Sin especificar": todos los gastos
+  /// anteriores a v10 (RNF18) y los que el usuario no asignó.
+  final int? paymentMethodId;
   const Transaction(
       {required this.id,
       required this.categoryId,
@@ -1094,7 +1497,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       required this.date,
       required this.note,
       required this.isRecurring,
-      this.recurringTemplateId});
+      this.recurringTemplateId,
+      this.paymentMethodId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1106,6 +1510,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     map['is_recurring'] = Variable<bool>(isRecurring);
     if (!nullToAbsent || recurringTemplateId != null) {
       map['recurring_template_id'] = Variable<int>(recurringTemplateId);
+    }
+    if (!nullToAbsent || paymentMethodId != null) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId);
     }
     return map;
   }
@@ -1121,6 +1528,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       recurringTemplateId: recurringTemplateId == null && nullToAbsent
           ? const Value.absent()
           : Value(recurringTemplateId),
+      paymentMethodId: paymentMethodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethodId),
     );
   }
 
@@ -1136,6 +1546,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       isRecurring: serializer.fromJson<bool>(json['isRecurring']),
       recurringTemplateId:
           serializer.fromJson<int?>(json['recurringTemplateId']),
+      paymentMethodId: serializer.fromJson<int?>(json['paymentMethodId']),
     );
   }
   @override
@@ -1149,6 +1560,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'note': serializer.toJson<String>(note),
       'isRecurring': serializer.toJson<bool>(isRecurring),
       'recurringTemplateId': serializer.toJson<int?>(recurringTemplateId),
+      'paymentMethodId': serializer.toJson<int?>(paymentMethodId),
     };
   }
 
@@ -1159,7 +1571,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           DateTime? date,
           String? note,
           bool? isRecurring,
-          Value<int?> recurringTemplateId = const Value.absent()}) =>
+          Value<int?> recurringTemplateId = const Value.absent(),
+          Value<int?> paymentMethodId = const Value.absent()}) =>
       Transaction(
         id: id ?? this.id,
         categoryId: categoryId ?? this.categoryId,
@@ -1170,6 +1583,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         recurringTemplateId: recurringTemplateId.present
             ? recurringTemplateId.value
             : this.recurringTemplateId,
+        paymentMethodId: paymentMethodId.present
+            ? paymentMethodId.value
+            : this.paymentMethodId,
       );
   Transaction copyWithCompanion(TransactionsCompanion data) {
     return Transaction(
@@ -1184,6 +1600,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       recurringTemplateId: data.recurringTemplateId.present
           ? data.recurringTemplateId.value
           : this.recurringTemplateId,
+      paymentMethodId: data.paymentMethodId.present
+          ? data.paymentMethodId.value
+          : this.paymentMethodId,
     );
   }
 
@@ -1196,14 +1615,15 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('date: $date, ')
           ..write('note: $note, ')
           ..write('isRecurring: $isRecurring, ')
-          ..write('recurringTemplateId: $recurringTemplateId')
+          ..write('recurringTemplateId: $recurringTemplateId, ')
+          ..write('paymentMethodId: $paymentMethodId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, categoryId, amount, date, note, isRecurring, recurringTemplateId);
+  int get hashCode => Object.hash(id, categoryId, amount, date, note,
+      isRecurring, recurringTemplateId, paymentMethodId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1214,7 +1634,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.date == this.date &&
           other.note == this.note &&
           other.isRecurring == this.isRecurring &&
-          other.recurringTemplateId == this.recurringTemplateId);
+          other.recurringTemplateId == this.recurringTemplateId &&
+          other.paymentMethodId == this.paymentMethodId);
 }
 
 class TransactionsCompanion extends UpdateCompanion<Transaction> {
@@ -1225,6 +1646,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String> note;
   final Value<bool> isRecurring;
   final Value<int?> recurringTemplateId;
+  final Value<int?> paymentMethodId;
   const TransactionsCompanion({
     this.id = const Value.absent(),
     this.categoryId = const Value.absent(),
@@ -1233,6 +1655,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.note = const Value.absent(),
     this.isRecurring = const Value.absent(),
     this.recurringTemplateId = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
   });
   TransactionsCompanion.insert({
     this.id = const Value.absent(),
@@ -1242,6 +1665,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.note = const Value.absent(),
     this.isRecurring = const Value.absent(),
     this.recurringTemplateId = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
   })  : categoryId = Value(categoryId),
         amount = Value(amount),
         date = Value(date);
@@ -1253,6 +1677,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? note,
     Expression<bool>? isRecurring,
     Expression<int>? recurringTemplateId,
+    Expression<int>? paymentMethodId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1263,6 +1688,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (isRecurring != null) 'is_recurring': isRecurring,
       if (recurringTemplateId != null)
         'recurring_template_id': recurringTemplateId,
+      if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
     });
   }
 
@@ -1273,7 +1699,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<DateTime>? date,
       Value<String>? note,
       Value<bool>? isRecurring,
-      Value<int?>? recurringTemplateId}) {
+      Value<int?>? recurringTemplateId,
+      Value<int?>? paymentMethodId}) {
     return TransactionsCompanion(
       id: id ?? this.id,
       categoryId: categoryId ?? this.categoryId,
@@ -1282,6 +1709,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       note: note ?? this.note,
       isRecurring: isRecurring ?? this.isRecurring,
       recurringTemplateId: recurringTemplateId ?? this.recurringTemplateId,
+      paymentMethodId: paymentMethodId ?? this.paymentMethodId,
     );
   }
 
@@ -1309,6 +1737,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (recurringTemplateId.present) {
       map['recurring_template_id'] = Variable<int>(recurringTemplateId.value);
     }
+    if (paymentMethodId.present) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId.value);
+    }
     return map;
   }
 
@@ -1321,7 +1752,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('date: $date, ')
           ..write('note: $note, ')
           ..write('isRecurring: $isRecurring, ')
-          ..write('recurringTemplateId: $recurringTemplateId')
+          ..write('recurringTemplateId: $recurringTemplateId, ')
+          ..write('paymentMethodId: $paymentMethodId')
           ..write(')'))
         .toString();
   }
@@ -3152,6 +3584,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $CategoryBudgetsTable(this);
   late final $RecurringTemplatesTable recurringTemplates =
       $RecurringTemplatesTable(this);
+  late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $TransactionsTable transactions = $TransactionsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $SavingsGoalsTable savingsGoals = $SavingsGoalsTable(this);
@@ -3172,6 +3605,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         categories,
         categoryBudgets,
         recurringTemplates,
+        paymentMethods,
         transactions,
         appSettings,
         savingsGoals,
@@ -3693,6 +4127,204 @@ typedef $$RecurringTemplatesTableProcessedTableManager = ProcessedTableManager<
     ),
     RecurringTemplate,
     PrefetchHooks Function()>;
+typedef $$PaymentMethodsTableCreateCompanionBuilder = PaymentMethodsCompanion
+    Function({
+  Value<int> id,
+  required String alias,
+  required String kind,
+  required int colorValue,
+  Value<String?> last4,
+  Value<int?> billingDay,
+  Value<int?> dueDay,
+});
+typedef $$PaymentMethodsTableUpdateCompanionBuilder = PaymentMethodsCompanion
+    Function({
+  Value<int> id,
+  Value<String> alias,
+  Value<String> kind,
+  Value<int> colorValue,
+  Value<String?> last4,
+  Value<int?> billingDay,
+  Value<int?> dueDay,
+});
+
+class $$PaymentMethodsTableFilterComposer
+    extends Composer<_$AppDatabase, $PaymentMethodsTable> {
+  $$PaymentMethodsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get alias => $composableBuilder(
+      column: $table.alias, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+      column: $table.colorValue, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get last4 => $composableBuilder(
+      column: $table.last4, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get billingDay => $composableBuilder(
+      column: $table.billingDay, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get dueDay => $composableBuilder(
+      column: $table.dueDay, builder: (column) => ColumnFilters(column));
+}
+
+class $$PaymentMethodsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PaymentMethodsTable> {
+  $$PaymentMethodsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get alias => $composableBuilder(
+      column: $table.alias, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+      column: $table.colorValue, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get last4 => $composableBuilder(
+      column: $table.last4, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get billingDay => $composableBuilder(
+      column: $table.billingDay, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get dueDay => $composableBuilder(
+      column: $table.dueDay, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PaymentMethodsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PaymentMethodsTable> {
+  $$PaymentMethodsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get alias =>
+      $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+      column: $table.colorValue, builder: (column) => column);
+
+  GeneratedColumn<String> get last4 =>
+      $composableBuilder(column: $table.last4, builder: (column) => column);
+
+  GeneratedColumn<int> get billingDay => $composableBuilder(
+      column: $table.billingDay, builder: (column) => column);
+
+  GeneratedColumn<int> get dueDay =>
+      $composableBuilder(column: $table.dueDay, builder: (column) => column);
+}
+
+class $$PaymentMethodsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $PaymentMethodsTable,
+    PaymentMethod,
+    $$PaymentMethodsTableFilterComposer,
+    $$PaymentMethodsTableOrderingComposer,
+    $$PaymentMethodsTableAnnotationComposer,
+    $$PaymentMethodsTableCreateCompanionBuilder,
+    $$PaymentMethodsTableUpdateCompanionBuilder,
+    (
+      PaymentMethod,
+      BaseReferences<_$AppDatabase, $PaymentMethodsTable, PaymentMethod>
+    ),
+    PaymentMethod,
+    PrefetchHooks Function()> {
+  $$PaymentMethodsTableTableManager(
+      _$AppDatabase db, $PaymentMethodsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PaymentMethodsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PaymentMethodsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PaymentMethodsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> alias = const Value.absent(),
+            Value<String> kind = const Value.absent(),
+            Value<int> colorValue = const Value.absent(),
+            Value<String?> last4 = const Value.absent(),
+            Value<int?> billingDay = const Value.absent(),
+            Value<int?> dueDay = const Value.absent(),
+          }) =>
+              PaymentMethodsCompanion(
+            id: id,
+            alias: alias,
+            kind: kind,
+            colorValue: colorValue,
+            last4: last4,
+            billingDay: billingDay,
+            dueDay: dueDay,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String alias,
+            required String kind,
+            required int colorValue,
+            Value<String?> last4 = const Value.absent(),
+            Value<int?> billingDay = const Value.absent(),
+            Value<int?> dueDay = const Value.absent(),
+          }) =>
+              PaymentMethodsCompanion.insert(
+            id: id,
+            alias: alias,
+            kind: kind,
+            colorValue: colorValue,
+            last4: last4,
+            billingDay: billingDay,
+            dueDay: dueDay,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$PaymentMethodsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $PaymentMethodsTable,
+    PaymentMethod,
+    $$PaymentMethodsTableFilterComposer,
+    $$PaymentMethodsTableOrderingComposer,
+    $$PaymentMethodsTableAnnotationComposer,
+    $$PaymentMethodsTableCreateCompanionBuilder,
+    $$PaymentMethodsTableUpdateCompanionBuilder,
+    (
+      PaymentMethod,
+      BaseReferences<_$AppDatabase, $PaymentMethodsTable, PaymentMethod>
+    ),
+    PaymentMethod,
+    PrefetchHooks Function()>;
 typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
     Function({
   Value<int> id,
@@ -3702,6 +4334,7 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   Value<String> note,
   Value<bool> isRecurring,
   Value<int?> recurringTemplateId,
+  Value<int?> paymentMethodId,
 });
 typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
     Function({
@@ -3712,6 +4345,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<String> note,
   Value<bool> isRecurring,
   Value<int?> recurringTemplateId,
+  Value<int?> paymentMethodId,
 });
 
 class $$TransactionsTableFilterComposer
@@ -3743,6 +4377,10 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<int> get recurringTemplateId => $composableBuilder(
       column: $table.recurringTemplateId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get paymentMethodId => $composableBuilder(
+      column: $table.paymentMethodId,
       builder: (column) => ColumnFilters(column));
 }
 
@@ -3776,6 +4414,10 @@ class $$TransactionsTableOrderingComposer
   ColumnOrderings<int> get recurringTemplateId => $composableBuilder(
       column: $table.recurringTemplateId,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get paymentMethodId => $composableBuilder(
+      column: $table.paymentMethodId,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -3807,6 +4449,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<int> get recurringTemplateId => $composableBuilder(
       column: $table.recurringTemplateId, builder: (column) => column);
+
+  GeneratedColumn<int> get paymentMethodId => $composableBuilder(
+      column: $table.paymentMethodId, builder: (column) => column);
 }
 
 class $$TransactionsTableTableManager extends RootTableManager<
@@ -3842,6 +4487,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String> note = const Value.absent(),
             Value<bool> isRecurring = const Value.absent(),
             Value<int?> recurringTemplateId = const Value.absent(),
+            Value<int?> paymentMethodId = const Value.absent(),
           }) =>
               TransactionsCompanion(
             id: id,
@@ -3851,6 +4497,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             note: note,
             isRecurring: isRecurring,
             recurringTemplateId: recurringTemplateId,
+            paymentMethodId: paymentMethodId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -3860,6 +4507,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String> note = const Value.absent(),
             Value<bool> isRecurring = const Value.absent(),
             Value<int?> recurringTemplateId = const Value.absent(),
+            Value<int?> paymentMethodId = const Value.absent(),
           }) =>
               TransactionsCompanion.insert(
             id: id,
@@ -3869,6 +4517,7 @@ class $$TransactionsTableTableManager extends RootTableManager<
             note: note,
             isRecurring: isRecurring,
             recurringTemplateId: recurringTemplateId,
+            paymentMethodId: paymentMethodId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -4990,6 +5639,8 @@ class $AppDatabaseManager {
       $$CategoryBudgetsTableTableManager(_db, _db.categoryBudgets);
   $$RecurringTemplatesTableTableManager get recurringTemplates =>
       $$RecurringTemplatesTableTableManager(_db, _db.recurringTemplates);
+  $$PaymentMethodsTableTableManager get paymentMethods =>
+      $$PaymentMethodsTableTableManager(_db, _db.paymentMethods);
   $$TransactionsTableTableManager get transactions =>
       $$TransactionsTableTableManager(_db, _db.transactions);
   $$AppSettingsTableTableManager get appSettings =>
