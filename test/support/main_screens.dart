@@ -129,6 +129,7 @@ Future<Future<void> Function()> pumpMainScreen(
           .overrideWith((ref) => Stream.value(<MonthlyAdjustment>[])),
       savingsGoalsProvider.overrideWith((ref) => Stream.value(goals)),
       savingsTotalsProvider.overrideWith((ref) => Stream.value({1: 450000})),
+      monthContributedProvider.overrideWith((ref, m) => Stream.value(30000)),
       quickExpenseTemplatesProvider.overrideWith((ref) => Stream.value(quick)),
       recurringTemplatesProvider.overrideWith((ref) => Stream.value(recurring)),
     ],

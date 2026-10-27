@@ -21,6 +21,13 @@ class SavingsRepository {
   Stream<List<SavingsContribution>> watchContributions(int goalId) =>
       _db.watchContributionsForGoal(goalId);
 
+  /// RF51: total aportado a metas en el mes de [month].
+  Stream<int> watchContributedInMonth(DateTime month) =>
+      _db.watchContributedInMonth(month);
+
+  Future<int> totalContributedInMonth(DateTime month) =>
+      watchContributedInMonth(month).first;
+
   Future<void> addContribution(
           {required int goalId,
           required int amount,

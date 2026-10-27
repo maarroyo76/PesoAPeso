@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/budget_resolver.dart';
+import '../../core/utils/daily_allowance.dart';
 import '../../core/utils/formatting.dart';
+import '../../data/repositories/categories_repository.dart';
+import '../../data/repositories/savings_repository.dart';
+import '../../data/repositories/transactions_repository.dart';
 
 const _kLastOpenYearMonthKey = 'last_open_year_month';
 
@@ -18,6 +22,31 @@ DateTime? remainderMonthFor(int? lastOpenYm, int currentYm) {
   final month = lastOpenYm % 100;
   if (month < 1 || month > 12) return null;
   return DateTime(year, month);
+}
+
+/// Lo que quedó libre del presupuesto de [month]. RF04/RF15: se calcula
+/// contra el presupuesto TOTAL que el usuario fija directamente
+/// (MonthlyBudgets), no contra la suma de presupuestos por categoría.
+/// RF51 (corrige I2): los aportes a metas del mes también salen del
+/// presupuesto, aunque no sean gasto de ninguna categoría.
+Future<int> monthRemainder({
+  required CategoriesRepository categories,
+  required TransactionsRepository transactions,
+  required SavingsRepository savings,
+  required DateTime month,
+}) async {
+  final budget = withTotalAdjustments(
+    resolveMonthlyBudgetForMonth(
+        await categories.watchAllMonthlyBudgets().first, month),
+    adjustmentsForMonth(await categories.watchAllAdjustments().first, month),
+  );
+  final spent = (await transactions.watchTransactionsForMonth(month).first)
+      .fold<int>(0, (a, t) => a + t.amount);
+  return availableThisMonth(
+    budget: budget,
+    spent: spent,
+    saved: await savings.totalContributedInMonth(month),
+  );
 }
 
 /// RF15: al abrir la app en un mes distinto al de la última sesión, si el
@@ -39,23 +68,12 @@ Future<void> checkPreviousMonthRemainder(
 
   final prevMonth = remainderMonthFor(lastOpenYm, currentYm);
   if (prevMonth != null) {
-    // RF04/RF15: el remanente se calcula contra el presupuesto TOTAL que el
-    // usuario fija directamente (MonthlyBudgets), no contra la suma de
-    // presupuestos por categoría.
-    final categoriesRepo = ref.read(categoriesRepositoryProvider);
-    final allMonthlyBudgets =
-        await categoriesRepo.watchAllMonthlyBudgets().first;
-    final allAdjustments = await categoriesRepo.watchAllAdjustments().first;
-    final totalBudgetPrev = withTotalAdjustments(
-      resolveMonthlyBudgetForMonth(allMonthlyBudgets, prevMonth),
-      adjustmentsForMonth(allAdjustments, prevMonth),
+    final remainder = await monthRemainder(
+      categories: ref.read(categoriesRepositoryProvider),
+      transactions: ref.read(transactionsRepositoryProvider),
+      savings: ref.read(savingsRepositoryProvider),
+      month: prevMonth,
     );
-    final txPrev = await ref
-        .read(transactionsRepositoryProvider)
-        .watchTransactionsForMonth(prevMonth)
-        .first;
-    final totalSpentPrev = txPrev.fold<int>(0, (a, t) => a + t.amount);
-    final remainder = totalBudgetPrev - totalSpentPrev;
 
     if (remainder > 0 && context.mounted) {
       await _showRemainderDialog(context, ref,
@@ -184,10 +202,13 @@ Future<void> _showRemainderDialog(
           reason: reason,
         );
   } else if (targetKind == 'goal' && goalId != null) {
+    // El aporte va al último día del mes del remanente, no al actual: esa
+    // plata ya era de ese mes y no debe descontarse del presupuesto de este
+    // (RF51).
     await ref.read(savingsRepositoryProvider).addContribution(
           goalId: goalId!,
           amount: remainder,
-          date: now,
+          date: DateTime(prevMonth.year, prevMonth.month + 1, 0),
           note: reason,
         );
   }

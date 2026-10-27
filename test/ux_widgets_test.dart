@@ -41,6 +41,7 @@ void main() {
             .overrideWith((ref) => Stream.value(<MonthlyBudget>[])),
         monthlyAdjustmentsProvider
             .overrideWith((ref) => Stream.value(<MonthlyAdjustment>[])),
+        monthContributedProvider.overrideWith((ref, month) => Stream.value(0)),
       ],
       child: MaterialApp(home: Scaffold(body: screen)),
     );

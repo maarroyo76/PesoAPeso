@@ -793,6 +793,20 @@ class AppDatabase extends _$AppDatabase {
         .watch();
   }
 
+  /// RF51 (corrige I2): total aportado a metas en el mes de [month]. Ese
+  /// dinero sale del presupuesto del mes aunque no sea gasto de categoría.
+  Stream<int> watchContributedInMonth(DateTime month) {
+    final start = DateTime(month.year, month.month, 1);
+    final end = DateTime(month.year, month.month + 1, 1);
+    final total = savingsContributions.amount.sum();
+    return (selectOnly(savingsContributions)
+          ..addColumns([total])
+          ..where(savingsContributions.date.isBiggerOrEqualValue(start) &
+              savingsContributions.date.isSmallerThanValue(end)))
+        .map((row) => row.read(total) ?? 0)
+        .watchSingle();
+  }
+
   Future<void> addContribution(
       {required int goalId,
       required int amount,

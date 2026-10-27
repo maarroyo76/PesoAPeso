@@ -67,6 +67,10 @@ final savingsGoalsProvider =
 final savingsTotalsProvider = StreamProvider<Map<int, int>>((ref) =>
     ref.watch(savingsRepositoryProvider).watchTotalContributedByGoal());
 
+/// RF51: total aportado a metas en [month]; sale del presupuesto del mes.
+final monthContributedProvider = StreamProvider.family((ref, DateTime month) =>
+    ref.watch(savingsRepositoryProvider).watchContributedInMonth(month));
+
 final goalContributionsProvider = StreamProvider.family((ref, int goalId) =>
     ref.watch(savingsRepositoryProvider).watchContributions(goalId));
 

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/utils/daily_allowance.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/ledger_paper.dart';
 import '../../core/widgets/month_selector.dart';
@@ -103,6 +104,7 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     final prevTxAsync = ref.watch(monthTransactionsProvider(prevMonth));
     final prevSpent =
         prevTxAsync.valueOrNull?.fold<int>(0, (a, t) => a + t.amount);
+    final saved = ref.watch(monthContributedProvider(_month)).valueOrNull ?? 0;
 
     return categoriesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -111,7 +113,7 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => LoadError(e),
         data: (transactions) => _buildContent(
-            categories, transactions, budgets, totalBudget, prevSpent),
+            categories, transactions, budgets, totalBudget, prevSpent, saved),
       ),
     );
   }
@@ -121,7 +123,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
       List<Transaction> transactions,
       Map<String, int> budgets,
       int totalBudget,
-      int? prevSpent) {
+      int? prevSpent,
+      int saved) {
     final categoriesById = {for (final c in categories) c.id: c};
     final spentByCategory = <String, int>{};
     for (final t in transactions) {
@@ -130,12 +133,6 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     }
 
     final totalSpent = spentByCategory.values.fold<int>(0, (a, b) => a + b);
-    // RF04/RF05: `totalBudget` es el presupuesto TOTAL que el usuario fija
-    // directamente (MonthlyBudgets) — ya NO es la suma de presupuestos por
-    // categoría, esos son cosas distintas (ver PresupuestosScreen).
-    final overallRatio =
-        totalBudget > 0 ? (totalSpent / totalBudget).clamp(0.0, 1.0) : 0.0;
-
     final recentTx = transactions
         .where((t) => categoriesById.containsKey(t.categoryId))
         .toList()
@@ -158,9 +155,10 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
           onNext: _isCurrentMonth ? null : _next,
           child: _TotalCard(
             spent: totalSpent,
+            saved: saved,
             budget: totalBudget,
-            ratio: overallRatio,
             prevSpent: prevSpent,
+            today: _isCurrentMonth ? DateTime.now() : null,
           ),
         ),
         SwipeHint(visible: _showHint == true),
@@ -329,21 +327,31 @@ class _RecentTxRow extends StatelessWidget {
   }
 }
 
+/// RF04/RF05: [budget] es el presupuesto TOTAL que el usuario fija
+/// directamente (MonthlyBudgets), no la suma de presupuestos por categoría.
+/// RF51: los aportes a metas ([saved]) también salen de ese presupuesto.
 class _TotalCard extends StatelessWidget {
   const _TotalCard({
     required this.spent,
+    required this.saved,
     required this.budget,
-    required this.ratio,
     required this.prevSpent,
+    required this.today,
   });
   final int spent;
+  final int saved;
   final int budget;
-  final double ratio;
   final int? prevSpent;
+
+  /// Solo en el mes en curso: muestra cuánto se puede gastar hoy (RF38).
+  final DateTime? today;
 
   @override
   Widget build(BuildContext context) {
-    final overBudget = spent > budget && budget > 0;
+    final available =
+        availableThisMonth(budget: budget, spent: spent, saved: saved);
+    final overBudget = budget > 0 && available < 0;
+    final ratio = budget > 0 ? ((spent + saved) / budget).clamp(0.0, 1.0) : 0.0;
     final barColor = overBudget ? context.colors.rust : context.colors.green;
 
     return Container(
@@ -395,24 +403,115 @@ class _TotalCard extends StatelessWidget {
               ratio: ratio,
               color: barColor,
               semanticsLabel: 'Presupuesto del mes',
-              semanticsValue: budgetUsageSemantics(spent, budget),
+              semanticsValue: budgetUsageSemantics(spent + saved, budget),
             ),
             if (budget > 0) ...[
-              const SizedBox(height: 10),
-              Text(
-                overBudget
-                    ? 'Excediste el presupuesto en ${currencyFmt.format(spent - budget)}'
-                    : 'Saldo disponible del mes: ${currencyFmt.format(budget - spent)}',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: overBudget ? FontWeight.w400 : FontWeight.w600,
-                  color:
-                      overBudget ? context.colors.rust : context.colors.green,
-                ),
+              const SizedBox(height: 12),
+              // Wrap: con letra grande las cifras bajan a otra línea.
+              Wrap(
+                spacing: 20,
+                runSpacing: 8,
+                children: [
+                  _Figure(label: 'Gastado', amount: spent),
+                  _Figure(label: 'Ahorrado', amount: saved),
+                  _Figure(
+                    label: overBudget ? 'Excedido' : 'Disponible',
+                    amount: available.abs(),
+                    color:
+                        overBudget ? context.colors.rust : context.colors.green,
+                  ),
+                ],
               ),
+              if (today != null) ...[
+                const SizedBox(height: 12),
+                _TodayAllowance(available: available, today: today!),
+              ],
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Una cifra del desglose del mes (RF51): gastado, ahorrado o disponible.
+class _Figure extends StatelessWidget {
+  const _Figure({required this.label, required this.amount, this.color});
+  final String label;
+  final int amount;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
+        Text(
+          currencyFmt.format(amount),
+          style: appAmountTextStyle.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: color ?? context.colors.ink,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// RF38: cuánto se puede gastar hoy para no pasarse del presupuesto. Con el
+/// presupuesto excedido muestra $0 (el monto excedido ya está en el desglose).
+class _TodayAllowance extends StatelessWidget {
+  const _TodayAllowance({required this.available, required this.today});
+  final int available;
+  final DateTime today;
+
+  @override
+  Widget build(BuildContext context) {
+    final perDay = dailyAllowance(available: available, today: today);
+    final daysLeft = DateTime(today.year, today.month + 1, 0).day - today.day;
+    final hint = available <= 0
+        ? 'Ya usaste todo el presupuesto del mes'
+        : daysLeft == 0
+            ? 'Es el último día del mes'
+            : 'Por día, hasta fin de mes';
+    return Container(
+      padding: const EdgeInsets.only(top: 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.colors.rule)),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.end,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('PUEDES GASTAR HOY',
+                  style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 1.2,
+                      color: context.colors.inkSoft)),
+              Text(hint,
+                  style:
+                      TextStyle(fontSize: 11, color: context.colors.inkSoft)),
+            ],
+          ),
+          Text(
+            currencyFmt.format(perDay),
+            style: appAmountTextStyle.copyWith(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: perDay > 0 ? context.colors.green : context.colors.rust,
+            ),
+          ),
+        ],
       ),
     );
   }
