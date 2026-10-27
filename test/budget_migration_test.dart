@@ -56,6 +56,7 @@ void main() {
     final categories = await db.select(db.categories).get();
     final budgets = await db.select(db.categoryBudgets).get();
     final txs = await db.select(db.transactions).get();
+    final quick = await db.select(db.quickExpenseTemplates).get();
     // La columna vieja ya no debe existir tras la migración.
     final columns =
         await db.customSelect("PRAGMA table_info('categories')").get();
@@ -63,6 +64,8 @@ void main() {
 
     final now = DateTime.now();
     expect(categories, hasLength(2));
+    expect(quick.map((q) => q.label), isNot(contains(kBipTopUpLabel)),
+        reason: 'RF45: "Carga bip!" es solo para instalaciones nuevas');
     expect(txs, hasLength(1),
         reason: 'las transacciones existentes no deben perderse');
     expect(

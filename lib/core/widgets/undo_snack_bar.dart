@@ -12,15 +12,21 @@ typedef UndoAction = Future<void> Function();
 /// el messenger propio de la hoja, porque el de la app queda detrás de ella.
 void showUndoSnackBar(
   ScaffoldMessengerState messenger, {
-  required String message,
+  String? message,
   required UndoAction onUndo,
+
+  /// Reemplaza a [message] cuando el aviso necesita más que un texto (p. ej.
+  /// el selector de cantidad de RF46, que se actualiza sin cerrar el aviso).
+  Widget? content,
+  Duration duration = const Duration(seconds: 4),
 }) {
+  assert(message != null || content != null);
   final colors = messenger.context.colors;
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(
     SnackBar(
-      content: Text(message),
-      duration: const Duration(seconds: 4),
+      content: content ?? Text(message!),
+      duration: duration,
       // Con acción, el SnackBar queda fijo por defecto; este debe irse solo.
       persist: false,
       backgroundColor: colors.ink,

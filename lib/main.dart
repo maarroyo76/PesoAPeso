@@ -340,6 +340,28 @@ class _RootShellState extends ConsumerState<RootShell>
       );
     }
 
+    // RF55: el presupuesto total, una vez por umbral y por mes.
+    if (generated.isNotEmpty) {
+      final total = await evaluateTotalBudgetAlert(
+        categories: ref.read(categoriesRepositoryProvider),
+        transactions: ref.read(transactionsRepositoryProvider),
+        settings: ref.read(settingsRepositoryProvider),
+        date: generated.last.date,
+      );
+      if (total != null) {
+        await NotificationService.instance.init();
+        await NotificationService.instance.showBudgetAlert(
+          // Los ids de gastos parten en 1: el 0 queda para el total.
+          id: 0,
+          title: total.isOverBudget
+              ? 'Presupuesto total superado'
+              : 'Presupuesto total casi lleno',
+          body: '${total.message} Incluye gastos recurrentes registrados '
+              'automáticamente.',
+        );
+      }
+    }
+
     // RF15: remanente del mes anterior, si corresponde.
     if (!mounted) return;
     await checkPreviousMonthRemainder(context, ref);

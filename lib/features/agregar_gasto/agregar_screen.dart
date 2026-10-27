@@ -21,6 +21,10 @@ class AgregarScreen extends ConsumerWidget {
 
   /// UX01: un toque registra el gasto de inmediato; el aviso posterior
   /// permite deshacerlo. Devuelve true para que el chip muestre "✓ Listo".
+  ///
+  /// RF46: el mismo aviso ofrece ×2, ×3 o más, que corrigen ese gasto (sigue
+  /// siendo uno solo, por el monto multiplicado). Así ×1 toma un toque y ×2,
+  /// dos, sin preguntar la cantidad antes de cada registro.
   Future<bool> _handleQuickAdd(
       BuildContext context, WidgetRef ref, QuickExpenseTemplate qa) async {
     final date = DateTime.now();
@@ -47,16 +51,54 @@ class AgregarScreen extends ConsumerWidget {
     }
     HapticFeedback.lightImpact();
     if (!context.mounted) return true;
+    // El aviso se actualiza en su lugar al cambiar la cantidad, sin cerrarse.
+    final quantity = ValueNotifier(1);
+    Future<void> setQuantity(int n) async {
+      if (n == quantity.value) return;
+      quantity.value = n;
+      await txRepo.updateTransaction(
+        id: id,
+        categoryId: qa.categoryId,
+        amount: qa.amount * n,
+        date: date,
+        note: quickAddNote(qa.label, n),
+      );
+      HapticFeedback.selectionClick();
+      final alerts =
+          await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
+      if (context.mounted) showBudgetAlertBanner(context, alerts);
+    }
+
     showUndoSnackBar(
       ScaffoldMessenger.of(context),
-      message: 'Registrado · ${qa.label} ${currencyFmt.format(qa.amount)}',
       onUndo: () => txRepo.deleteTransaction(id),
+      // Un poco más que el aviso normal: da tiempo de elegir la cantidad.
+      duration: const Duration(seconds: 6),
+      content: ValueListenableBuilder<int>(
+        valueListenable: quantity,
+        builder: (_, n, __) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Registrado · ${quickAddNote(qa.label, n)} '
+                '${currencyFmt.format(qa.amount * n)}'),
+            _QuantityPicker(
+              selected: n,
+              onSelected: setQuantity,
+              onMore: () async {
+                final more = await _askQuantity(context, qa);
+                if (more != null) await setQuantity(more);
+              },
+            ),
+          ],
+        ),
+      ),
     );
-    // RF18: aviso inmediato en pantalla si este gasto deja la categoría en
-    // 80% o más de su presupuesto del mes.
-    final alert =
-        await checkBudgetAlert(ref, categoryId: qa.categoryId, date: date);
-    if (alert != null && context.mounted) showBudgetAlertBanner(context, alert);
+    // RF18/RF55: aviso inmediato en pantalla si este gasto deja la categoría
+    // o el presupuesto total en 80% o más.
+    final alerts =
+        await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
+    if (context.mounted) showBudgetAlertBanner(context, alerts);
     return true;
   }
 
@@ -106,7 +148,7 @@ class AgregarScreen extends ConsumerWidget {
             // UX07: la fila crece con la letra del sistema (64 px al 100%).
             final textScale =
                 MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 3.0);
-            return SizedBox(
+            final chips = SizedBox(
               height: 20 + 44 * textScale,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
@@ -127,6 +169,34 @@ class AgregarScreen extends ConsumerWidget {
                   );
                 },
               ),
+            );
+            // RF45: con un acceso de bip!, recordar que conviene anotar las
+            // cargas de la tarjeta y no cada viaje.
+            final hasBip =
+                templates.any((t) => t.label.toLowerCase().contains('bip'));
+            if (!hasBip) return chips;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                chips,
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.lightbulb_outline,
+                        size: 14, color: context.colors.inkSoft),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Con la tarjeta bip!, registra cada carga y no cada '
+                        'viaje: el gasto ya ocurrió al cargarla.',
+                        style: TextStyle(
+                            fontSize: 12, color: context.colors.inkSoft),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             );
           },
         ),
@@ -173,13 +243,11 @@ class AgregarScreen extends ConsumerWidget {
             }
 
             if (!context.mounted) return undo;
-            // RF18: aviso inmediato en pantalla si este gasto deja la
-            // categoría en 80% o más de su presupuesto del mes.
-            final alert =
-                await checkBudgetAlert(ref, categoryId: categoryId, date: date);
-            if (alert != null && context.mounted) {
-              showBudgetAlertBanner(context, alert);
-            }
+            // RF18/RF55: aviso inmediato en pantalla si este gasto deja la
+            // categoría o el presupuesto total en 80% o más.
+            final alerts = await checkBudgetAlerts(ref,
+                categoryId: categoryId, date: date);
+            if (context.mounted) showBudgetAlertBanner(context, alerts);
             return undo;
           },
         ),
@@ -305,6 +373,107 @@ Future<void> _showQuickTemplateEditor(
       await repo.update(template.id,
           label: label, amount: amount, categoryId: selectedCategoryId);
     }
+  }
+}
+
+/// RF46: nota de un acceso rápido registrado [quantity] veces de una vez
+/// (p. ej. "Micro/Metro ×2").
+String quickAddNote(String label, int quantity) =>
+    quantity == 1 ? label : '$label ×$quantity';
+
+/// Cantidad para "Más" (RF46): de 2 a 99.
+Future<int?> _askQuantity(BuildContext context, QuickExpenseTemplate qa) {
+  final controller = TextEditingController();
+  String? error;
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) {
+        void submit() {
+          final n = int.tryParse(controller.text);
+          if (n == null || n < 2 || n > 99) {
+            setDialogState(() => error = 'Ingresa un número entre 2 y 99');
+            return;
+          }
+          Navigator.pop(ctx, n);
+        }
+
+        return AlertDialog(
+          title: Text('¿Cuántas veces ${qa.label}?'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(2),
+            ],
+            onSubmitted: (_) => submit(),
+            decoration: InputDecoration(
+              labelText: 'Cantidad',
+              helperText: 'Se registra un solo gasto por el total',
+              errorText: error,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(onPressed: submit, child: const Text('Listo')),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// Botones ×1, ×2, ×3 y "Más" dentro del aviso de registro (RF46).
+class _QuantityPicker extends StatelessWidget {
+  const _QuantityPicker({
+    required this.selected,
+    required this.onSelected,
+    required this.onMore,
+  });
+  final int selected;
+  final ValueChanged<int> onSelected;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final paper = context.colors.paper;
+    Widget option(String label, VoidCallback onTap, {bool active = false}) =>
+        TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: paper,
+            backgroundColor: active ? paper.withValues(alpha: 0.18) : null,
+            minimumSize: const Size(48, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          onPressed: onTap,
+          child: Text(label,
+              style: TextStyle(
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
+        );
+    final isOther = selected > 3;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 4,
+        children: [
+          for (final n in [1, 2, 3])
+            Semantics(
+              selected: n == selected,
+              child: option('×$n', () => onSelected(n), active: n == selected),
+            ),
+          Semantics(
+            selected: isOther,
+            child:
+                option(isOther ? '×$selected' : 'Más', onMore, active: isOther),
+          ),
+        ],
+      ),
+    );
   }
 }
 

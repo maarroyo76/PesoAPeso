@@ -72,12 +72,11 @@ class EditTransactionScreen extends ConsumerWidget {
                         note: note,
                         isRecurring: recurring,
                       );
-                  // RF18: editar un gasto también puede dejar la categoría en 80%.
-                  final alert = await checkBudgetAlert(ref,
+                  // RF18/RF55: editar un gasto también puede dejar la
+                  // categoría o el total en 80%.
+                  final alerts = await checkBudgetAlerts(ref,
                       categoryId: categoryId, date: date);
-                  if (alert != null && context.mounted) {
-                    showBudgetAlertBanner(context, alert);
-                  }
+                  if (context.mounted) showBudgetAlertBanner(context, alerts);
                   return null;
                 },
               ),

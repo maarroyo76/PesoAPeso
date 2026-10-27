@@ -195,6 +195,17 @@ final _defaultQuickExpenseTemplates = [
       label: 'Salida', amount: 15000, categoryId: 'ocio'),
 ];
 
+/// RF45: acceso por defecto para cargar la tarjeta bip!. Solo en
+/// instalaciones nuevas (onCreate): la migración (from < 7) sigue creando
+/// exactamente los cinco accesos de siempre.
+const kBipTopUpLabel = 'Carga bip!';
+final _defaultQuickExpenseTemplatesForNewInstall = [
+  ..._defaultQuickExpenseTemplates.take(3),
+  QuickExpenseTemplatesCompanion.insert(
+      label: kBipTopUpLabel, amount: 5000, categoryId: 'transporte'),
+  ..._defaultQuickExpenseTemplates.skip(3),
+];
+
 // --- Base de datos -------------------------------------------------------
 
 @DriftDatabase(tables: [
@@ -304,7 +315,8 @@ class AppDatabase extends _$AppDatabase {
               MonthlyBudgetsCompanion.insert(
                   year: now.year, month: now.month, amount: 580000),
             );
-            b.insertAll(quickExpenseTemplates, _defaultQuickExpenseTemplates);
+            b.insertAll(quickExpenseTemplates,
+                _defaultQuickExpenseTemplatesForNewInstall);
           });
         },
         onUpgrade: (m, from, to) async {

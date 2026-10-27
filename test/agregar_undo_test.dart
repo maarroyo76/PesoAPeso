@@ -135,6 +135,42 @@ void main() {
     expect(await txs(tester, db), isEmpty);
   });
 
+  testWidgets('RF46: ×2 en el aviso deja un solo gasto con monto doble',
+      (tester) async {
+    final db = await pumpAgregar(tester);
+
+    await tester.tap(find.text('Café'));
+    await settle(tester);
+    await tester.tap(find.text('×2'));
+    await settle(tester);
+
+    final saved = (await txs(tester, db)).single;
+    expect(saved.amount, 5000);
+    expect(saved.note, 'Café ×2');
+    expect(find.textContaining('Café ×2'), findsOneWidget);
+
+    await tester.tap(find.text('Deshacer'));
+    await settle(tester);
+    expect(await txs(tester, db), isEmpty);
+  });
+
+  testWidgets('RF46: "Más" permite otra cantidad', (tester) async {
+    final db = await pumpAgregar(tester);
+
+    await tester.tap(find.text('Café'));
+    await settle(tester);
+    await tester.tap(find.text('Más'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '5');
+    await tester.tap(find.text('Listo'));
+    await settle(tester);
+
+    final saved = (await txs(tester, db)).single;
+    expect(saved.amount, 12500);
+    expect(saved.note, 'Café ×5');
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   testWidgets('preselecciona la categoría del último gasto registrado',
       (tester) async {
     tallView(tester);
@@ -183,5 +219,10 @@ void main() {
     active.value = false;
     await tester.pumpAndSettle();
     expect(amountFocused(), isFalse, reason: 'al salir se cierra el teclado');
+  });
+
+  test('quickAddNote', () {
+    expect(quickAddNote('Micro/Metro', 1), 'Micro/Metro');
+    expect(quickAddNote('Micro/Metro', 2), 'Micro/Metro ×2');
   });
 }
