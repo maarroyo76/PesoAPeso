@@ -17,6 +17,13 @@ final currentMonthProvider = StateProvider<DateTime>((ref) {
   return DateTime(now.year, now.month);
 });
 
+/// Pestaña visible del RootShell. Es un provider para que otras pantallas
+/// puedan llevar al usuario a otra pestaña (UX10: Resumen vacío → Agregar).
+final selectedTabProvider = StateProvider<int>((ref) => 0);
+
+/// Índice de la pestaña Agregar en el RootShell.
+const kAgregarTabIndex = 1;
+
 /// Una sola instancia de la base de datos para toda la app.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
@@ -85,24 +92,53 @@ final monthTransactionsProvider = StreamProvider.family((ref, DateTime month) =>
 final categoryBudgetsProvider = StreamProvider(
     (ref) => ref.watch(categoriesRepositoryProvider).watchAllBudgets());
 
-/// Presupuesto vigente por categoría para [month]: la fila propia de ese mes
-/// si existe, o la más reciente anterior. Se recalcula solo cuando cambia
-/// categoryBudgetsProvider (cualquier edición de presupuesto).
-final monthBudgetsProvider = Provider.family<Map<String, int>, DateTime>(
+/// Presupuesto BASE por categoría para [month]: la fila propia de ese mes si
+/// existe, o la más reciente anterior. Es lo que se edita en Presupuestos;
+/// no incluye los ajustes de un solo mes (RF50).
+final monthBaseBudgetsProvider = Provider.family<Map<String, int>, DateTime>(
   (ref, month) => resolveBudgetsForMonth(
     ref.watch(categoryBudgetsProvider).valueOrNull ?? const [],
     month,
   ),
 );
 
+final monthlyAdjustmentsProvider = StreamProvider(
+    (ref) => ref.watch(categoriesRepositoryProvider).watchAllAdjustments());
+
+/// RF50: ajustes de un solo mes (p. ej. el remanente del mes anterior).
+final monthAdjustmentsProvider =
+    Provider.family<List<MonthlyAdjustment>, DateTime>(
+  (ref, month) => adjustmentsForMonth(
+    ref.watch(monthlyAdjustmentsProvider).valueOrNull ?? const [],
+    month,
+  ),
+);
+
+/// Presupuesto vigente por categoría para [month]: base más ajustes del mes.
+/// Se recalcula solo con cualquier edición de presupuesto o ajuste.
+final monthBudgetsProvider = Provider.family<Map<String, int>, DateTime>(
+  (ref, month) => withCategoryAdjustments(
+    ref.watch(monthBaseBudgetsProvider(month)),
+    ref.watch(monthAdjustmentsProvider(month)),
+  ),
+);
+
 final monthlyBudgetsProvider = StreamProvider(
     (ref) => ref.watch(categoriesRepositoryProvider).watchAllMonthlyBudgets());
 
-/// Presupuesto TOTAL vigente para [month] — fijado directamente por el
-/// usuario, NO es la suma de monthBudgetsProvider. 0 si nunca se fijó.
-final monthTotalBudgetProvider = Provider.family<int, DateTime>(
+/// Presupuesto TOTAL base para [month] — fijado directamente por el usuario,
+/// NO es la suma de los presupuestos por categoría. 0 si nunca se fijó.
+final monthBaseTotalBudgetProvider = Provider.family<int, DateTime>(
   (ref, month) => resolveMonthlyBudgetForMonth(
     ref.watch(monthlyBudgetsProvider).valueOrNull ?? const [],
     month,
+  ),
+);
+
+/// Presupuesto TOTAL vigente para [month]: base más todos los ajustes del mes.
+final monthTotalBudgetProvider = Provider.family<int, DateTime>(
+  (ref, month) => withTotalAdjustments(
+    ref.watch(monthBaseTotalBudgetProvider(month)),
+    ref.watch(monthAdjustmentsProvider(month)),
   ),
 );

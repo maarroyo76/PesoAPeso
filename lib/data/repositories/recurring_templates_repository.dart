@@ -7,7 +7,7 @@ class RecurringTemplatesRepository {
   Stream<List<RecurringTemplate>> watchTemplates() =>
       _db.watchRecurringTemplates();
 
-  Future<void> createTemplate({
+  Future<int> createTemplate({
     required String categoryId,
     required int amount,
     required String note,
@@ -45,4 +45,8 @@ class RecurringTemplatesRepository {
   }
 
   Future<void> deleteTemplate(int id) => _db.deleteRecurringTemplate(id);
+
+  /// UX02: borra y devuelve cómo deshacerlo.
+  Future<Future<void> Function()> deleteTemplateUndoable(int id) =>
+      _db.deleteRecurringTemplateUndoable(id);
 }

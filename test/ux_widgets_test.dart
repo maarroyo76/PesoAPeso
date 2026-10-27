@@ -12,8 +12,10 @@ import 'package:sqlite3/open.dart';
 import 'package:peso_a_peso/core/providers/app_providers.dart';
 import 'package:peso_a_peso/core/utils/formatting.dart';
 import 'package:peso_a_peso/core/widgets/info_hint.dart';
+import 'package:peso_a_peso/core/widgets/load_error.dart';
 import 'package:peso_a_peso/core/widgets/section_label.dart';
 import 'package:peso_a_peso/data/local/app_database.dart';
+import 'package:peso_a_peso/features/ajustes/ajustes_screen.dart';
 import 'package:peso_a_peso/features/estadisticas/estadisticas_screen.dart';
 import 'package:peso_a_peso/features/resumen/resumen_screen.dart';
 
@@ -37,6 +39,8 @@ void main() {
             .overrideWith((ref) => Stream.value(<CategoryBudget>[])),
         monthlyBudgetsProvider
             .overrideWith((ref) => Stream.value(<MonthlyBudget>[])),
+        monthlyAdjustmentsProvider
+            .overrideWith((ref) => Stream.value(<MonthlyAdjustment>[])),
       ],
       child: MaterialApp(home: Scaffold(body: screen)),
     );
@@ -46,7 +50,8 @@ void main() {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: Center(
-          child: InfoTooltip(message: 'Explicación de prueba', child: Text('X')),
+          child:
+              InfoTooltip(message: 'Explicación de prueba', child: Text('X')),
         ),
       ),
     ));
@@ -54,6 +59,15 @@ void main() {
     await tester.tap(find.text('X'));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Explicación de prueba'), findsOneWidget);
+  });
+
+  testWidgets('LoadError muestra un mensaje para el usuario, no el error',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: LoadError(StateError('SqliteException(1)'))),
+    ));
+    expect(find.text('No se pudieron cargar estos datos.'), findsOneWidget);
+    expect(find.textContaining('Sqlite'), findsNothing);
   });
 
   testWidgets('SectionLabel con info muestra el ícono; sin info no',
@@ -173,7 +187,8 @@ void main() {
     final prev = capitalizeMonth(DateTime(now.year, now.month - 1), monthFmt);
     expect(find.text(current), findsOneWidget);
 
-    await tester.fling(find.text('PROMEDIO DIARIO'), const Offset(300, 0), 1500);
+    await tester.fling(
+        find.text('PROMEDIO DIARIO'), const Offset(300, 0), 1500);
     await tester.pumpAndSettle();
     expect(find.text(prev), findsOneWidget);
 
@@ -183,5 +198,37 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await db.close();
+  });
+
+  testWidgets('Resumen vacío en el mes actual lleva a Agregar (UX10)',
+      (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    await tester.pumpWidget(app(const ResumenScreen(), db));
+    await tester.pumpAndSettle();
+
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(ResumenScreen)));
+    expect(container.read(selectedTabProvider), 0);
+    await tester.ensureVisible(find.text('Registrar un gasto'));
+    await tester.tap(find.text('Registrar un gasto'));
+    await tester.pump();
+    expect(container.read(selectedTabProvider), kAgregarTabIndex);
+
+    // En un mes pasado no se invita a registrar.
+    await tester.fling(find.text('GASTO DEL MES'), const Offset(300, 0), 1500);
+    await tester.pumpAndSettle();
+    expect(find.text('Registrar un gasto'), findsNothing);
+    expect(find.text('Sin gastos registrados este mes.'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await db.close();
+  });
+
+  testWidgets('Ajustes muestra cada sección con su nombre (UX05)',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: AjustesScreen()));
+    expect(find.text('Categorías'), findsOneWidget);
+    expect(find.text('Gastos recurrentes'), findsOneWidget);
+    expect(find.text('Respaldo'), findsOneWidget);
   });
 }

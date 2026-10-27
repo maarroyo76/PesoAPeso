@@ -7,6 +7,13 @@ import 'connection.dart';
 part 'app_database.g.dart';
 
 // --- Esquema -----------------------------------------------------------
+//
+// Las claves foráneas se declaran como `customConstraints` de tabla y no con
+// `.references()`: drift_dev 2.31 no reconoce el nombre de la tabla dentro de
+// `references(...)` con el analyzer actual (lo trata como type literal), avisa
+// "This parameter should be a simple class name" y genera la columna SIN
+// `REFERENCES`. Así quedaron las tablas hasta v8. drift_dev >= 2.32 lo
+// corrige, pero exige sqlite3 ^3, que reemplaza a sqlcipher_flutter_libs.
 
 class Categories extends Table {
   TextColumn get id => text()();
@@ -27,13 +34,17 @@ class Categories extends Table {
 /// presupuesto desde la UI solo escribe/actualiza la fila del mes actual —
 /// nunca reescribe meses pasados.
 class CategoryBudgets extends Table {
-  TextColumn get categoryId => text().references(Categories, #id)();
+  TextColumn get categoryId => text()();
   IntColumn get year => integer()();
   IntColumn get month => integer()();
   IntColumn get amount => integer()();
 
   @override
   Set<Column> get primaryKey => {categoryId, year, month};
+
+  @override
+  List<String> get customConstraints =>
+      ['FOREIGN KEY (category_id) REFERENCES categories (id)'];
 }
 
 /// RF04 (corrección): presupuesto mensual TOTAL, fijado directamente por el
@@ -54,11 +65,23 @@ class MonthlyBudgets extends Table {
 
 class Transactions extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get categoryId => text().references(Categories, #id)();
+  TextColumn get categoryId => text()();
   IntColumn get amount => integer()();
   DateTimeColumn get date => dateTime()();
   TextColumn get note => text().withDefault(const Constant(''))();
   BoolColumn get isRecurring => boolean().withDefault(const Constant(false))();
+
+  /// Plantilla recurrente (RF12) que generó este gasto, para poder ir de un
+  /// gasto a su recurrente. Null en gastos manuales, en los anteriores a v9
+  /// que no se pudieron enlazar, y si la plantilla se eliminó.
+  IntColumn get recurringTemplateId => integer().nullable()();
+
+  @override
+  List<String> get customConstraints => [
+        'FOREIGN KEY (category_id) REFERENCES categories (id)',
+        'FOREIGN KEY (recurring_template_id) REFERENCES recurring_templates (id) '
+            'ON DELETE SET NULL',
+      ];
 }
 
 /// RF12: plantilla de gasto recurrente (arriendo, suscripciones). Se crea al
@@ -66,12 +89,16 @@ class Transactions extends Table {
 /// yyyyMM) evita generar dos veces la ocurrencia de un mismo mes.
 class RecurringTemplates extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get categoryId => text().references(Categories, #id)();
+  TextColumn get categoryId => text()();
   IntColumn get amount => integer()();
   TextColumn get note => text().withDefault(const Constant(''))();
   IntColumn get dayOfMonth => integer()();
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   IntColumn get lastGeneratedYearMonth => integer()();
+
+  @override
+  List<String> get customConstraints =>
+      ['FOREIGN KEY (category_id) REFERENCES categories (id)'];
 }
 
 /// RF24: acceso rápido de gasto (RF02), configurable por el usuario — antes
@@ -82,7 +109,11 @@ class QuickExpenseTemplates extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get label => text()();
   IntColumn get amount => integer()();
-  TextColumn get categoryId => text().references(Categories, #id)();
+  TextColumn get categoryId => text()();
+
+  @override
+  List<String> get customConstraints =>
+      ['FOREIGN KEY (category_id) REFERENCES categories (id)'];
 }
 
 /// RF13: meta de ahorro con nombre y monto objetivo. El progreso se calcula
@@ -96,20 +127,46 @@ class SavingsGoals extends Table {
 /// RF14: aporte manual a una meta.
 class SavingsContributions extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get goalId => integer().references(SavingsGoals, #id)();
+  IntColumn get goalId => integer()();
   IntColumn get amount => integer()();
   DateTimeColumn get date => dateTime()();
   TextColumn get note => text().withDefault(const Constant(''))();
+
+  @override
+  List<String> get customConstraints =>
+      ['FOREIGN KEY (goal_id) REFERENCES savings_goals (id)'];
 }
 
 /// RF19: acceso rápido de aporte a una meta — monto fijo o % del presupuesto
 /// mensual total —, con CRUD de usuario. `mode` es 'fixed' o 'percent'.
 class SavingsQuickAdds extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get goalId => integer().references(SavingsGoals, #id)();
+  IntColumn get goalId => integer()();
   TextColumn get label => text()();
   TextColumn get mode => text()();
   IntColumn get value => integer()();
+
+  @override
+  List<String> get customConstraints =>
+      ['FOREIGN KEY (goal_id) REFERENCES savings_goals (id)'];
+}
+
+/// RF50 (corrige I1): ajuste del presupuesto que vale SOLO para un mes, sin
+/// heredarse a los siguientes como las filas de CategoryBudgets /
+/// MonthlyBudgets. Lo crea, por ejemplo, el remanente del mes anterior.
+/// `categoryId` null = ajuste solo al total; con categoría, sube esa
+/// categoría y también el total (es plata extra, no una reasignación).
+class MonthlyAdjustments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get year => integer()();
+  IntColumn get month => integer()();
+  TextColumn get categoryId => text().nullable()();
+  IntColumn get amount => integer()();
+  TextColumn get reason => text().withDefault(const Constant(''))();
+
+  @override
+  List<String> get customConstraints =>
+      ['FOREIGN KEY (category_id) REFERENCES categories (id)'];
 }
 
 /// Almacén simple clave/valor. Usado por RF15 para recordar el mes de la
@@ -151,6 +208,7 @@ final _defaultQuickExpenseTemplates = [
   SavingsQuickAdds,
   MonthlyBudgets,
   QuickExpenseTemplates,
+  MonthlyAdjustments,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openDatabaseConnection());
@@ -159,10 +217,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        // SQLite ignora las claves foráneas si no se activa este pragma en
+        // cada conexión. Va en beforeOpen (después de onCreate / onUpgrade)
+        // porque las migraciones reconstruyen tablas con `alterTable`, y eso
+        // fallaría con las claves foráneas ya activas.
+        beforeOpen: (details) async {
+          await customStatement('PRAGMA foreign_keys = ON');
+        },
         onCreate: (m) async {
           await m.createAll();
           final now = DateTime.now();
@@ -327,11 +392,52 @@ class AppDatabase extends _$AppDatabase {
                   .write(CategoriesCompanion(iconKey: Value(entry.value)));
             }
           }
+          if (from < 9) {
+            // Hasta v8 las tablas se crearon sin `REFERENCES` (ver nota del
+            // esquema): se reconstruyen para que tengan sus claves foráneas.
+            // SQLite no permite agregarlas con ALTER TABLE.
+            // ignore: experimental_member_use
+            await m.alterTable(TableMigration(categoryBudgets));
+            // ignore: experimental_member_use
+            await m.alterTable(TableMigration(recurringTemplates));
+            // ignore: experimental_member_use
+            await m.alterTable(TableMigration(transactions,
+                newColumns: [transactions.recurringTemplateId]));
+            // ignore: experimental_member_use
+            await m.alterTable(TableMigration(quickExpenseTemplates));
+            // ignore: experimental_member_use
+            await m.alterTable(TableMigration(savingsContributions));
+            // ignore: experimental_member_use
+            await m.alterTable(TableMigration(savingsQuickAdds));
+            await m.createTable(monthlyAdjustments);
+
+            // I4: los gastos generados antes de v9 no guardaban su plantilla.
+            // Se enlazan solo cuando hay una única plantilla con la misma
+            // categoría y nota; si es ambiguo, quedan sin enlace.
+            await customStatement('''
+              UPDATE transactions SET recurring_template_id = (
+                SELECT rt.id FROM recurring_templates rt
+                WHERE rt.category_id = transactions.category_id
+                  AND rt.note = transactions.note)
+              WHERE is_recurring = 1 AND (
+                SELECT COUNT(*) FROM recurring_templates rt
+                WHERE rt.category_id = transactions.category_id
+                  AND rt.note = transactions.note) = 1
+            ''');
+          }
         },
       );
 
   Future<int> deleteTransaction(int id) =>
       (delete(transactions)..where((t) => t.id.equals(id))).go();
+
+  /// UX02: borra el gasto y devuelve cómo restaurarlo tal cual (mismo id).
+  Future<Future<void> Function()> deleteTransactionUndoable(int id) async {
+    final row =
+        await (select(transactions)..where((t) => t.id.equals(id))).getSingle();
+    await deleteTransaction(id);
+    return () => into(transactions).insert(row.toCompanion(false));
+  }
 
   Future<void> updateTransaction({
     required int id,
@@ -397,10 +503,38 @@ class AppDatabase extends _$AppDatabase {
       _countWhere(quickExpenseTemplates,
           quickExpenseTemplates.categoryId.equals(categoryId));
 
-  Future<void> deleteCategory(String id) async {
-    await (delete(categoryBudgets)..where((b) => b.categoryId.equals(id))).go();
-    await (delete(categories)..where((c) => c.id.equals(id))).go();
-  }
+  Future<void> deleteCategory(String id) => transaction(() async {
+        await (delete(categoryBudgets)..where((b) => b.categoryId.equals(id)))
+            .go();
+        // Un ajuste de un mes era plata extra para ese mes: al borrar la
+        // categoría pasa al total, para que ese mes no pierda presupuesto.
+        await (update(monthlyAdjustments)
+              ..where((a) => a.categoryId.equals(id)))
+            .write(const MonthlyAdjustmentsCompanion(categoryId: Value(null)));
+        await (delete(categories)..where((c) => c.id.equals(id))).go();
+      });
+
+  // --- Ajustes de un solo mes (RF50) ---------------------------------------
+
+  Stream<List<MonthlyAdjustment>> watchAllAdjustments() =>
+      select(monthlyAdjustments).watch();
+
+  Future<int> insertAdjustment({
+    required DateTime month,
+    String? categoryId,
+    required int amount,
+    required String reason,
+  }) =>
+      into(monthlyAdjustments).insert(MonthlyAdjustmentsCompanion.insert(
+        year: month.year,
+        month: month.month,
+        categoryId: Value(categoryId),
+        amount: amount,
+        reason: Value(reason),
+      ));
+
+  Future<int> deleteAdjustment(int id) =>
+      (delete(monthlyAdjustments)..where((a) => a.id.equals(id))).go();
 
   Stream<List<CategoryBudget>> watchAllBudgets() =>
       select(categoryBudgets).watch();
@@ -477,7 +611,7 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<RecurringTemplate>> watchRecurringTemplates() =>
       select(recurringTemplates).watch();
 
-  Future<void> insertRecurringTemplate({
+  Future<int> insertRecurringTemplate({
     required String categoryId,
     required int amount,
     required String note,
@@ -537,6 +671,26 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteRecurringTemplate(int id) =>
       (delete(recurringTemplates)..where((t) => t.id.equals(id))).go();
 
+  /// UX02: borra la plantilla y devuelve cómo restaurarla. Al borrarla, sus
+  /// gastos quedan sin enlace (ON DELETE SET NULL); restaurar los re-enlaza.
+  Future<Future<void> Function()> deleteRecurringTemplateUndoable(int id) =>
+      transaction(() async {
+        final row = await (select(recurringTemplates)
+              ..where((t) => t.id.equals(id)))
+            .getSingle();
+        final linkedIds = await (selectOnly(transactions)
+              ..addColumns([transactions.id])
+              ..where(transactions.recurringTemplateId.equals(id)))
+            .map((r) => r.read(transactions.id)!)
+            .get();
+        await deleteRecurringTemplate(id);
+        return () => transaction(() async {
+              await into(recurringTemplates).insert(row.toCompanion(false));
+              await (update(transactions)..where((t) => t.id.isIn(linkedIds)))
+                  .write(TransactionsCompanion(recurringTemplateId: Value(id)));
+            });
+      });
+
   int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
 
   /// RF12: revisa las plantillas activas al abrir la app y genera SOLO la
@@ -559,18 +713,24 @@ class AppDatabase extends _$AppDatabase {
       final day = tpl.dayOfMonth.clamp(1, _daysInMonth(now.year, now.month));
       if (now.day < day) continue;
       final date = DateTime(now.year, now.month, day);
-      final id = await into(transactions).insert(
-        TransactionsCompanion.insert(
-          categoryId: tpl.categoryId,
-          amount: tpl.amount,
-          date: date,
-          note: Value(tpl.note),
-          isRecurring: const Value(true),
-        ),
-      );
-      await (update(recurringTemplates)..where((t) => t.id.equals(tpl.id)))
-          .write(RecurringTemplatesCompanion(
-              lastGeneratedYearMonth: Value(currentYm)));
+      // Gasto y marca del mes en una sola transacción: si la app se cierra
+      // entre ambas escrituras, el próximo arranque generaría el gasto otra vez.
+      final id = await transaction(() async {
+        final id = await into(transactions).insert(
+          TransactionsCompanion.insert(
+            categoryId: tpl.categoryId,
+            amount: tpl.amount,
+            date: date,
+            note: Value(tpl.note),
+            isRecurring: const Value(true),
+            recurringTemplateId: Value(tpl.id),
+          ),
+        );
+        await (update(recurringTemplates)..where((t) => t.id.equals(tpl.id)))
+            .write(RecurringTemplatesCompanion(
+                lastGeneratedYearMonth: Value(currentYm)));
+        return id;
+      });
       generated.add(await (select(transactions)..where((t) => t.id.equals(id)))
           .getSingle());
     }
@@ -594,12 +754,13 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> deleteSavingsGoal(int id) async {
-    await (delete(savingsContributions)..where((c) => c.goalId.equals(id)))
-        .go();
-    await (delete(savingsQuickAdds)..where((q) => q.goalId.equals(id))).go();
-    await (delete(savingsGoals)..where((g) => g.id.equals(id))).go();
-  }
+  Future<void> deleteSavingsGoal(int id) => transaction(() async {
+        await (delete(savingsContributions)..where((c) => c.goalId.equals(id)))
+            .go();
+        await (delete(savingsQuickAdds)..where((q) => q.goalId.equals(id)))
+            .go();
+        await (delete(savingsGoals)..where((g) => g.id.equals(id))).go();
+      });
 
   /// Total aportado por meta, reactivo — la barra de progreso se recalcula
   /// sola con cada aporte nuevo.
@@ -633,6 +794,15 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> deleteContribution(int id) =>
       (delete(savingsContributions)..where((c) => c.id.equals(id))).go();
+
+  /// UX02: borra el aporte y devuelve cómo restaurarlo tal cual (mismo id).
+  Future<Future<void> Function()> deleteContributionUndoable(int id) async {
+    final row = await (select(savingsContributions)
+          ..where((c) => c.id.equals(id)))
+        .getSingle();
+    await deleteContribution(id);
+    return () => into(savingsContributions).insert(row.toCompanion(false));
+  }
 
   Stream<List<SavingsQuickAdd>> watchQuickAddsForGoal(int goalId) =>
       (select(savingsQuickAdds)..where((q) => q.goalId.equals(goalId))).watch();
@@ -701,6 +871,9 @@ class AppDatabase extends _$AppDatabase {
       'savingsQuickAdds': (await select(savingsQuickAdds).get())
           .map((r) => r.toJson())
           .toList(),
+      'monthlyAdjustments': (await select(monthlyAdjustments).get())
+          .map((r) => r.toJson())
+          .toList(),
       'appSettings':
           (await select(appSettings).get()).map((r) => r.toJson()).toList(),
     };
@@ -710,12 +883,15 @@ class AppDatabase extends _$AppDatabase {
   /// formato de [exportAllData]). Todo o nada: corre en una transacción.
   Future<void> restoreAllData(Map<String, dynamic> data) async {
     await transaction(() async {
+      // Hijos antes que padres: con claves foráneas activas, borrar una
+      // fila referenciada falla.
       await delete(savingsQuickAdds).go();
       await delete(savingsContributions).go();
       await delete(savingsGoals).go();
+      await delete(transactions).go();
       await delete(recurringTemplates).go();
       await delete(quickExpenseTemplates).go();
-      await delete(transactions).go();
+      await delete(monthlyAdjustments).go();
       await delete(categoryBudgets).go();
       await delete(monthlyBudgets).go();
       await delete(categories).go();
@@ -742,15 +918,22 @@ class AppDatabase extends _$AppDatabase {
         await into(monthlyBudgets).insertOnConflictUpdate(
             MonthlyBudget.fromJson(row).toCompanion(false));
       }
-      for (final row
-          in (data['transactions'] as List).cast<Map<String, dynamic>>()) {
-        await into(transactions).insertOnConflictUpdate(
-            Transaction.fromJson(row).toCompanion(false));
+      // `?? []`: respaldos anteriores a v9 no traen ajustes de un mes.
+      for (final row in (data['monthlyAdjustments'] as List? ?? [])
+          .cast<Map<String, dynamic>>()) {
+        await into(monthlyAdjustments).insertOnConflictUpdate(
+            MonthlyAdjustment.fromJson(row).toCompanion(false));
       }
+      // Plantillas antes que gastos: un gasto puede apuntar a su plantilla.
       for (final row in (data['recurringTemplates'] as List)
           .cast<Map<String, dynamic>>()) {
         await into(recurringTemplates).insertOnConflictUpdate(
             RecurringTemplate.fromJson(row).toCompanion(false));
+      }
+      for (final row
+          in (data['transactions'] as List).cast<Map<String, dynamic>>()) {
+        await into(transactions).insertOnConflictUpdate(
+            Transaction.fromJson(row).toCompanion(false));
       }
       // `?? []`: respaldos hechos antes de agregar esta tabla no traen la
       // clave — restaurarlos no debe fallar, solo dejar los accesos rápidos

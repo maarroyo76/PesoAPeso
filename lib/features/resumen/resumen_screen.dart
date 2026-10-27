@@ -12,6 +12,7 @@ import '../../core/widgets/ledger_paper.dart';
 import '../../core/widgets/month_selector.dart';
 import '../../core/widgets/month_swipe.dart';
 import '../../core/widgets/section_label.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import 'transaction_detail_sheet.dart';
 
@@ -105,10 +106,10 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
 
     return categoriesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => LoadError(e),
       data: (categories) => txAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => LoadError(e),
         data: (transactions) => _buildContent(
             categories, transactions, budgets, totalBudget, prevSpent),
       ),
@@ -175,12 +176,17 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
         const SizedBox(height: 24),
         const SectionLabel('Últimos registros'),
         const SizedBox(height: 12),
-        if (transactions.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+        if (transactions.isEmpty && _isCurrentMonth)
+          _EmptyMonthCard(
+            onAdd: () =>
+                ref.read(selectedTabProvider.notifier).state = kAgregarTabIndex,
+          )
+        else if (transactions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
               'Sin gastos registrados este mes.',
-              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+              style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
             ),
           )
         else
@@ -205,26 +211,31 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.paper,
+      backgroundColor: context.colors.paper,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => TransactionDetailSheet(
         category: category,
+        month: _month,
         transactions: catTx,
       ),
     );
   }
 }
 
-String _formatRecentDate(DateTime date) {
+String _formatRecentDate(Transaction tx) {
+  final date = tx.date;
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(date.year, date.month, date.day);
-  final timeStr = DateFormat('HH:mm').format(date);
-  if (day == today) return 'Hoy, $timeStr';
-  if (day == today.subtract(const Duration(days: 1))) return 'Ayer, $timeStr';
-  return '${DateFormat('d MMM', 'es_CL').format(date)}, $timeStr';
+  final dayStr = day == today
+      ? 'Hoy'
+      : day == today.subtract(const Duration(days: 1))
+          ? 'Ayer'
+          : DateFormat('d MMM', 'es_CL').format(date);
+  if (!hasMeaningfulTime(date, isRecurring: tx.isRecurring)) return dayStr;
+  return '$dayStr, ${DateFormat('HH:mm').format(date)}';
 }
 
 class _RecentTxRow extends StatelessWidget {
@@ -239,73 +250,79 @@ class _RecentTxRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(category.colorValue);
+    final color = context.colors.category(category.colorValue);
 
+    // Parte del espacio entre filas va dentro del InkWell y el alto mínimo
+    // es 48 px: el área táctil mínima de Android.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 2),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        child: Row(
-          children: [
-            Container(
-              width: 3,
-              height: 32,
-              margin: const EdgeInsets.only(right: 10),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 3,
+                height: 32,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color.withAlpha(30),
-                borderRadius: BorderRadius.circular(8),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: color.withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(iconForCategory(category), size: 16, color: color),
               ),
-              child: Icon(iconForCategory(category), size: 16, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tx.note.isNotEmpty ? tx.note : category.name,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text(
-                        _formatRecentDate(tx.date),
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.inkSoft),
-                      ),
-                      if (tx.isRecurring) ...[
-                        const SizedBox(width: 6),
-                        const Icon(Icons.repeat,
-                            size: 11, color: AppColors.inkSoft),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tx.note.isNotEmpty ? tx.note : category.name,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          _formatRecentDate(tx),
+                          style: TextStyle(
+                              fontSize: 11, color: context.colors.inkSoft),
+                        ),
+                        if (tx.isRecurring) ...[
+                          const SizedBox(width: 6),
+                          Icon(Icons.repeat,
+                              size: 11, color: context.colors.inkSoft),
+                        ],
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              currencyFmt.format(tx.amount),
-              style: appAmountTextStyle.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.ink,
+              const SizedBox(width: 8),
+              Text(
+                currencyFmt.format(tx.amount),
+                style: appAmountTextStyle.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.ink,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -327,27 +344,31 @@ class _TotalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final overBudget = spent > budget && budget > 0;
-    final barColor = overBudget ? AppColors.rust : AppColors.green;
+    final barColor = overBudget ? context.colors.rust : context.colors.green;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.paperDeep,
+        color: context.colors.paperDeep,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.rule),
+        border: Border.all(color: context.colors.rule),
       ),
       child: RuledPaperBackground(
         borderRadius: 11,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Wrap: con letra grande la variación pasa a la línea siguiente.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                const Text('GASTO DEL MES',
+                Text('GASTO DEL MES',
                     style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         letterSpacing: 1.2,
-                        color: AppColors.inkSoft)),
+                        color: context.colors.inkSoft)),
                 if (prevSpent != null && prevSpent! > 0)
                   _DeltaChip(spent: spent, prevSpent: prevSpent!),
               ],
@@ -362,15 +383,20 @@ class _TotalCard extends StatelessWidget {
                   fontSize: 42,
                   fontWeight: FontWeight.w700,
                   height: 1.0,
-                  color: overBudget ? AppColors.rust : AppColors.ink,
+                  color: overBudget ? context.colors.rust : context.colors.ink,
                 ),
               ),
             ),
             const SizedBox(height: 4),
             Text('de ${currencyFmt.format(budget)} presupuestado',
-                style: const TextStyle(fontSize: 13, color: AppColors.inkSoft)),
+                style: TextStyle(fontSize: 13, color: context.colors.inkSoft)),
             const SizedBox(height: 16),
-            LedgerCuadreBar(ratio: ratio, color: barColor),
+            LedgerCuadreBar(
+              ratio: ratio,
+              color: barColor,
+              semanticsLabel: 'Presupuesto del mes',
+              semanticsValue: budgetUsageSemantics(spent, budget),
+            ),
             if (budget > 0) ...[
               const SizedBox(height: 10),
               Text(
@@ -380,7 +406,8 @@ class _TotalCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: overBudget ? FontWeight.w400 : FontWeight.w600,
-                  color: overBudget ? AppColors.rust : AppColors.green,
+                  color:
+                      overBudget ? context.colors.rust : context.colors.green,
                 ),
               ),
             ],
@@ -405,11 +432,11 @@ class _DeltaChip extends StatelessWidget {
     final diff = spent - prevSpent;
     final pct = (diff.abs() / prevSpent * 100).round();
     final isDown = diff <= 0;
-    final color = isDown ? AppColors.green : AppColors.rust;
+    final color = isDown ? context.colors.green : context.colors.rust;
 
     if (diff == 0) {
-      return const Text('Igual que el mes anterior',
-          style: TextStyle(fontSize: 10, color: AppColors.inkSoft));
+      return Text('Igual que el mes anterior',
+          style: TextStyle(fontSize: 11, color: context.colors.inkSoft));
     }
 
     return Row(
@@ -420,7 +447,7 @@ class _DeltaChip extends StatelessWidget {
         const SizedBox(width: 2),
         Text('$pct% vs. mes anterior',
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+                fontSize: 11, fontWeight: FontWeight.w600, color: color)),
       ],
     );
   }
@@ -440,7 +467,7 @@ class _CategoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(category.colorValue);
+    final color = context.colors.category(category.colorValue);
     final ratio = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
     final overBudget = spent > budget;
 
@@ -491,7 +518,9 @@ class _CategoryRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: overBudget ? AppColors.rust : AppColors.ink,
+                          color: overBudget
+                              ? context.colors.rust
+                              : context.colors.ink,
                         ),
                       ),
                     ],
@@ -501,22 +530,67 @@ class _CategoryRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                     child: LinearProgressIndicator(
                       value: ratio,
+                      // El valor de una barra de progreso debe ser numérico (lo calcula
+                      // la barra); la descripción va en la etiqueta.
+                      semanticsLabel: 'Presupuesto de ${category.name}: '
+                          '${budgetUsageSemantics(spent, budget)}',
                       minHeight: 5,
-                      color: overBudget ? AppColors.rust : color,
-                      backgroundColor: AppColors.rule,
+                      color: overBudget ? context.colors.rust : color,
+                      backgroundColor: context.colors.rule,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text('Presupuesto: ${currencyFmt.format(budget)}',
-                      style: const TextStyle(
-                          fontSize: 10, color: AppColors.inkSoft)),
+                      style: TextStyle(
+                          fontSize: 11, color: context.colors.inkSoft)),
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.chevron_right, size: 16, color: AppColors.inkSoft),
+            Icon(Icons.chevron_right, size: 16, color: context.colors.inkSoft),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// UX10: el mes en curso sin gastos invita a registrar el primero, en lugar
+/// de solo avisar que no hay nada.
+class _EmptyMonthCard extends StatelessWidget {
+  const _EmptyMonthCard({required this.onAdd});
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: context.colors.rule),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Aún no registras gastos este mes',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.ink)),
+          const SizedBox(height: 4),
+          Text(
+            'Anota cada gasto al momento: toma unos segundos y así sabrás '
+            'cuánto te queda del presupuesto.',
+            style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: context.colors.ink),
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Registrar un gasto'),
+          ),
+        ],
       ),
     );
   }

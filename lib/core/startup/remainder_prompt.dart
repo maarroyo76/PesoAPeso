@@ -22,8 +22,12 @@ DateTime? remainderMonthFor(int? lastOpenYm, int currentYm) {
 
 /// RF15: al abrir la app en un mes distinto al de la última sesión, si el
 /// mes anterior cerró con presupuesto sin gastar, pregunta una sola vez si
-/// sumarlo al presupuesto del mes actual o aportarlo a una meta. Guarda el
-/// mes ya revisado para no repetir el aviso.
+/// sumarlo al presupuesto del mes actual (total o de una categoría) o
+/// aportarlo a una meta. Guarda el mes ya revisado para no repetir el aviso.
+///
+/// RF50 (corrige I1): sumarlo al presupuesto crea un ajuste que vale solo
+/// para el mes actual. Antes se escribía en la fila de presupuesto del mes,
+/// que se hereda, y el remanente quedaba sumado en todos los meses siguientes.
 Future<void> checkPreviousMonthRemainder(
     BuildContext context, WidgetRef ref) async {
   final settings = ref.read(settingsRepositoryProvider);
@@ -38,12 +42,14 @@ Future<void> checkPreviousMonthRemainder(
     // RF04/RF15: el remanente se calcula contra el presupuesto TOTAL que el
     // usuario fija directamente (MonthlyBudgets), no contra la suma de
     // presupuestos por categoría.
-    final allMonthlyBudgets = await ref
-        .read(categoriesRepositoryProvider)
-        .watchAllMonthlyBudgets()
-        .first;
-    final totalBudgetPrev =
-        resolveMonthlyBudgetForMonth(allMonthlyBudgets, prevMonth);
+    final categoriesRepo = ref.read(categoriesRepositoryProvider);
+    final allMonthlyBudgets =
+        await categoriesRepo.watchAllMonthlyBudgets().first;
+    final allAdjustments = await categoriesRepo.watchAllAdjustments().first;
+    final totalBudgetPrev = withTotalAdjustments(
+      resolveMonthlyBudgetForMonth(allMonthlyBudgets, prevMonth),
+      adjustmentsForMonth(allAdjustments, prevMonth),
+    );
     final txPrev = await ref
         .read(transactionsRepositoryProvider)
         .watchTransactionsForMonth(prevMonth)
@@ -72,18 +78,17 @@ Future<void> _showRemainderDialog(
   final goals = await ref.read(savingsRepositoryProvider).watchGoals().first;
   if (!context.mounted) return;
 
-  var targetKind = 'category';
+  var targetKind = 'total';
   String? categoryId = categories.isNotEmpty ? categories.first.id : null;
   int? goalId = goals.isNotEmpty ? goals.first.id : null;
-  if (categoryId == null) targetKind = 'goal';
 
   final apply = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialogState) => AlertDialog(
-        backgroundColor: AppColors.paper,
-        title: const Text('Presupuesto sin gastar',
-            style: TextStyle(fontSize: 16, color: AppColors.ink)),
+        backgroundColor: context.colors.paper,
+        title: Text('Presupuesto sin gastar',
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -93,7 +98,7 @@ Future<void> _showRemainderDialog(
                 '${capitalizeMonth(prevMonth, monthFmt)} cerró con '
                 '${currencyFmt.format(remainder)} sin gastar del presupuesto. '
                 '¿Qué quieres hacer con ese saldo?',
-                style: const TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
               ),
               const SizedBox(height: 12),
               RadioGroup<String>(
@@ -102,11 +107,17 @@ Future<void> _showRemainderDialog(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text('Sumar al presupuesto total de este mes'),
+                      value: 'total',
+                    ),
                     if (categoryId != null)
                       const RadioListTile<String>(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: Text('Sumar al presupuesto de una categoría'),
+                        title: Text('Sumar a una categoría, solo este mes'),
                         value: 'category',
                       ),
                     if (goalId != null)
@@ -145,11 +156,11 @@ Future<void> _showRemainderDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Ignorar',
-                style: TextStyle(color: AppColors.inkSoft)),
+            child: Text('Ignorar',
+                style: TextStyle(color: context.colors.inkSoft)),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.ink),
             onPressed: (targetKind == 'category' && categoryId == null) ||
                     (targetKind == 'goal' && goalId == null)
                 ? null
@@ -163,21 +174,21 @@ Future<void> _showRemainderDialog(
 
   if (apply != true) return;
 
-  if (targetKind == 'category' && categoryId != null) {
-    final currentMonth = DateTime(now.year, now.month);
-    final allBudgets =
-        await ref.read(categoriesRepositoryProvider).watchAllBudgets().first;
-    final currentBudgets = resolveBudgetsForMonth(allBudgets, currentMonth);
-    final newAmount = (currentBudgets[categoryId] ?? 0) + remainder;
-    await ref
-        .read(categoriesRepositoryProvider)
-        .setBudgetForMonth(categoryId!, currentMonth, newAmount);
+  final reason = 'Remanente de ${capitalizeMonth(prevMonth, monthFmt)}';
+  if (targetKind == 'total' ||
+      (targetKind == 'category' && categoryId != null)) {
+    await ref.read(categoriesRepositoryProvider).addAdjustment(
+          month: DateTime(now.year, now.month),
+          categoryId: targetKind == 'category' ? categoryId : null,
+          amount: remainder,
+          reason: reason,
+        );
   } else if (targetKind == 'goal' && goalId != null) {
     await ref.read(savingsRepositoryProvider).addContribution(
           goalId: goalId!,
           amount: remainder,
           date: now,
-          note: 'Remanente de ${capitalizeMonth(prevMonth, monthFmt)}',
+          note: reason,
         );
   }
 }

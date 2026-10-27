@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/budget_alert.dart';
-import '../../core/utils/formatting.dart';
+import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
+import '../recurrentes/recurrentes_screen.dart' show showRecurringEditor;
 import 'expense_form.dart';
 
 /// RF08: editar (o eliminar) un movimiento ya registrado. Reutiliza
@@ -14,89 +15,119 @@ class EditTransactionScreen extends ConsumerWidget {
   const EditTransactionScreen({super.key, required this.transaction});
   final Transaction transaction;
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.paper,
-        title: const Text('Eliminar gasto',
-            style: TextStyle(fontSize: 16, color: AppColors.ink)),
-        content: Text(
-          '¿Eliminar ${currencyFmt.format(transaction.amount)}'
-          '${transaction.note.isNotEmpty ? ' — ${transaction.note}' : ''}? '
-          'Esta acción no se puede deshacer.',
-          style: const TextStyle(color: AppColors.inkSoft),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppColors.inkSoft)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.rust),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    await ref
+  /// UX02: elimina sin diálogo y cierra la pantalla devolviendo cómo
+  /// deshacerlo; quien la abrió muestra el aviso "Deshacer".
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final undo = await ref
         .read(transactionsRepositoryProvider)
-        .deleteTransaction(transaction.id);
-    if (context.mounted) Navigator.of(context).pop(true);
+        .deleteTransactionUndoable(transaction.id);
+    if (context.mounted) Navigator.of(context).pop<UndoAction>(undo);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: AppColors.paper,
+      backgroundColor: context.colors.paper,
       appBar: AppBar(
         title: const Text('Editar gasto'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Eliminar gasto',
-            onPressed: () => _confirmDelete(context, ref),
+            onPressed: () => _delete(context, ref),
           ),
         ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
-          child: ExpenseForm(
-            isEditing: true,
-            initialAmount: transaction.amount,
-            initialCategoryId: transaction.categoryId,
-            initialDate: transaction.date,
-            initialNote: transaction.note,
-            initialRecurring: transaction.isRecurring,
-            onSaved: () => Navigator.of(context).pop(),
-            onSubmit: ({
-              required categoryId,
-              required amount,
-              required date,
-              required note,
-              required recurring,
-            }) async {
-              await ref.read(transactionsRepositoryProvider).updateTransaction(
-                    id: transaction.id,
-                    categoryId: categoryId,
-                    amount: amount,
-                    date: date,
-                    note: note,
-                    isRecurring: recurring,
-                  );
-              // RF18: editar un gasto también puede dejar la categoría en 80%.
-              final alert = await checkBudgetAlert(ref,
-                  categoryId: categoryId, date: date);
-              if (alert != null && context.mounted) {
-                showBudgetAlertBanner(context, alert);
-              }
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (transaction.recurringTemplateId != null)
+                _RecurringOriginCard(
+                    templateId: transaction.recurringTemplateId!),
+              ExpenseForm(
+                isEditing: true,
+                initialAmount: transaction.amount,
+                initialCategoryId: transaction.categoryId,
+                initialDate: transaction.date,
+                initialNote: transaction.note,
+                initialRecurring: transaction.isRecurring,
+                onSaved: () => Navigator.of(context).pop(),
+                onSubmit: ({
+                  required categoryId,
+                  required amount,
+                  required date,
+                  required note,
+                  required recurring,
+                }) async {
+                  await ref
+                      .read(transactionsRepositoryProvider)
+                      .updateTransaction(
+                        id: transaction.id,
+                        categoryId: categoryId,
+                        amount: amount,
+                        date: date,
+                        note: note,
+                        isRecurring: recurring,
+                      );
+                  // RF18: editar un gasto también puede dejar la categoría en 80%.
+                  final alert = await checkBudgetAlert(ref,
+                      categoryId: categoryId, date: date);
+                  if (alert != null && context.mounted) {
+                    showBudgetAlertBanner(context, alert);
+                  }
+                  return null;
+                },
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// I4: un gasto generado por una plantilla recurrente lleva a ella. Editar el
+/// gasto solo cambia esta ocurrencia; los meses siguientes se cambian (o se
+/// detienen) desde la plantilla.
+class _RecurringOriginCard extends ConsumerWidget {
+  const _RecurringOriginCard({required this.templateId});
+  final int templateId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final templates = ref.watch(recurringTemplatesProvider).valueOrNull;
+    final categories = ref.watch(categoriesProvider).valueOrNull;
+    final template = templates?.where((t) => t.id == templateId).firstOrNull;
+    if (template == null || categories == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: context.colors.rule),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.repeat, size: 18, color: context.colors.inkSoft),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Generado por un gasto recurrente (día ${template.dayOfMonth}). '
+              'Los cambios aquí no afectan los meses siguientes.',
+              style: TextStyle(fontSize: 12, color: context.colors.inkSoft),
+            ),
+          ),
+          TextButton(
+            onPressed: () => showRecurringEditor(context, ref, categories,
+                template: template),
+            child: Text('Ver recurrente',
+                style: TextStyle(color: context.colors.ink)),
+          ),
+        ],
       ),
     );
   }

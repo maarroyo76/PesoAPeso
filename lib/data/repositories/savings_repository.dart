@@ -31,6 +31,10 @@ class SavingsRepository {
 
   Future<void> deleteContribution(int id) => _db.deleteContribution(id);
 
+  /// UX02: borra y devuelve cómo deshacerlo.
+  Future<Future<void> Function()> deleteContributionUndoable(int id) =>
+      _db.deleteContributionUndoable(id);
+
   Stream<List<SavingsQuickAdd>> watchQuickAdds(int goalId) =>
       _db.watchQuickAddsForGoal(goalId);
 

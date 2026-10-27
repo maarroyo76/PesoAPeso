@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import '../agregar_gasto/expense_form.dart' show ExpenseCategoryChip;
 import '../categorias/categorias_screen.dart'
@@ -108,7 +109,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       case 1:
         for (final c in categories) {
           final controller = _categoryControllers[c.id];
-          final val = controller == null ? null : parseAmountText(controller.text);
+          final val =
+              controller == null ? null : parseAmountText(controller.text);
           if (val != null && val >= 0) {
             await ref
                 .read(categoriesRepositoryProvider)
@@ -162,19 +164,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final categoriesAsync = ref.watch(categoriesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.paper,
+      backgroundColor: context.colors.paper,
       body: SafeArea(
         child: categoriesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => LoadError(e),
           data: (categories) {
             if (!_totalBudgetPrefilled) {
-              final total = ref.read(monthTotalBudgetProvider(_currentMonth));
+              final total =
+                  ref.read(monthBaseTotalBudgetProvider(_currentMonth));
               _totalBudgetController.text =
                   total > 0 ? formatAmountInput(total) : '';
               _totalBudgetPrefilled = true;
             }
-            final budgets = ref.read(monthBudgetsProvider(_currentMonth));
+            final budgets = ref.read(monthBaseBudgetsProvider(_currentMonth));
             // Ahora que las categorías se pueden crear/eliminar en el paso 2
             // (RF23), la seleccionada acá podría haber sido borrada.
             if (_recurringCategoryId == null ||
@@ -251,8 +254,10 @@ class _ProgressHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('PASO ${step + 1} DE $totalSteps',
-              style: const TextStyle(
-                  fontSize: 10, letterSpacing: 1.2, color: AppColors.inkSoft)),
+              style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                  color: context.colors.inkSoft)),
           const SizedBox(height: 6),
           Text(_titles[step],
               style: Theme.of(context).textTheme.headlineMedium),
@@ -265,7 +270,7 @@ class _ProgressHeader extends StatelessWidget {
                   height: 3,
                   margin: EdgeInsets.only(right: i == totalSteps - 1 ? 0 : 4),
                   decoration: BoxDecoration(
-                    color: active ? AppColors.green : AppColors.rule,
+                    color: active ? context.colors.green : context.colors.rule,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -303,27 +308,27 @@ class _BottomBar extends StatelessWidget {
           if (showBack)
             IconButton(
               onPressed: onBack,
-              icon: const Icon(Icons.arrow_back, color: AppColors.inkSoft),
+              icon: Icon(Icons.arrow_back, color: context.colors.inkSoft),
               tooltip: 'Atrás',
             ),
           TextButton(
             onPressed: onSkip,
-            child: const Text('Omitir',
-                style: TextStyle(color: AppColors.inkSoft)),
+            child:
+                Text('Omitir', style: TextStyle(color: context.colors.inkSoft)),
           ),
           const Spacer(),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.ink,
+              backgroundColor: context.colors.ink,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             ),
             onPressed: onContinue,
             child: busy
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2, color: context.colors.paper),
                   )
                 : Text(isLastStep ? 'Finalizar' : 'Continuar'),
           ),
@@ -344,11 +349,11 @@ class _StepTotalBudget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '¿Cuánto quieres gastar como máximo este mes, en total? Es tu '
             'presupuesto general — puedes cambiarlo cuando quieras desde '
             'Presupuestos.',
-            style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
           ),
           const SizedBox(height: 24),
           TextField(
@@ -391,17 +396,17 @@ class _StepCategoryBudgets extends ConsumerWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'Cuánto quieres presupuestar en cada categoría esencial. Puedes '
                 'dejarlas en blanco y asignarlas después, y crear o editar '
                 'categorías acá mismo.',
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.add_circle_outline,
-                  color: AppColors.inkSoft),
+              icon:
+                  Icon(Icons.add_circle_outline, color: context.colors.inkSoft),
               tooltip: 'Nueva categoría',
               onPressed: () => showCategoryEditor(context, ref),
             ),
@@ -423,10 +428,12 @@ class _StepCategoryBudgets extends ConsumerWidget {
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: AppColors.paperDeep,
+                color: context.colors.paperDeep,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: overAllocated ? AppColors.rust : AppColors.rule),
+                    color: overAllocated
+                        ? context.colors.rust
+                        : context.colors.rule),
               ),
               child: Row(
                 children: [
@@ -435,7 +442,9 @@ class _StepCategoryBudgets extends ConsumerWidget {
                         ? Icons.warning_amber_outlined
                         : Icons.info_outline,
                     size: 16,
-                    color: overAllocated ? AppColors.rust : AppColors.inkSoft,
+                    color: overAllocated
+                        ? context.colors.rust
+                        : context.colors.inkSoft,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -448,8 +457,9 @@ class _StepCategoryBudgets extends ConsumerWidget {
                               '${total > 0 ? ' de ${currencyFmt.format(total)}' : ''}',
                       style: TextStyle(
                         fontSize: 12,
-                        color:
-                            overAllocated ? AppColors.rust : AppColors.inkSoft,
+                        color: overAllocated
+                            ? context.colors.rust
+                            : context.colors.inkSoft,
                         fontWeight:
                             overAllocated ? FontWeight.w600 : FontWeight.w400,
                       ),
@@ -461,14 +471,14 @@ class _StepCategoryBudgets extends ConsumerWidget {
           },
         ),
         if (categories.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text('No hay categorías todavía. Toca "+" para crear una.',
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+                style: TextStyle(color: context.colors.inkSoft, fontSize: 13)),
           )
         else
           ...categories.map((c) {
-            final color = Color(c.colorValue);
+            final color = context.colors.category(c.colorValue);
             return Padding(
               padding: const EdgeInsets.only(bottom: 14),
               child: Row(
@@ -511,8 +521,9 @@ class _StepCategoryBudgets extends ConsumerWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 18, color: AppColors.inkSoft),
+                    tooltip: 'Eliminar ${c.name}',
+                    icon: Icon(Icons.delete_outline,
+                        size: 18, color: context.colors.inkSoft),
                     onPressed: () => confirmDeleteCategory(context, ref, c),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -540,11 +551,11 @@ class _StepGoal extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Opcional. Si ya tienes algo en mente (ej. vacaciones, un fondo de '
             'emergencia), créalo ahora — si no, omite este paso y crea metas '
             'después desde la pestaña Metas.',
-            style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
           ),
           const SizedBox(height: 20),
           TextField(
@@ -594,11 +605,11 @@ class _StepRecurring extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Opcional. Si tienes un pago fijo cada mes (ej. arriendo, una '
             'suscripción), créalo ahora y la app lo registrará sola cada mes '
             '— si no, omite este paso.',
-            style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
           ),
           const SizedBox(height: 20),
           TextField(
@@ -629,12 +640,12 @@ class _StepRecurring extends StatelessWidget {
                 border: UnderlineInputBorder()),
           ),
           const SizedBox(height: 16),
-          const Text('Categoría',
-              style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+          Text('Categoría',
+              style: TextStyle(fontSize: 12, color: context.colors.inkSoft)),
           const SizedBox(height: 8),
           if (categories.isEmpty)
-            const Text('No hay categorías todavía.',
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 12))
+            Text('No hay categorías todavía.',
+                style: TextStyle(color: context.colors.inkSoft, fontSize: 12))
           else
             Wrap(
               spacing: 8,

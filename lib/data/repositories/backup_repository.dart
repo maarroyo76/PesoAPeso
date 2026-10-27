@@ -42,26 +42,32 @@ class BackupRepository {
   /// Devuelve true si se restauró, false si el usuario canceló la selección.
   /// Lanza [FormatException] si el archivo no tiene el formato esperado.
   Future<bool> importBackup() async {
+    final bytes = await pickBackupFile();
+    if (bytes == null) return false;
+    return restoreFromBytes(bytes);
+  }
+
+  /// Abre el selector de archivos y devuelve el contenido del respaldo
+  /// elegido, o null si el usuario canceló. No toca la base: la pantalla de
+  /// error de arranque lo usa antes de que exista una base que funcione.
+  static Future<Uint8List?> pickBackupFile() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
       withData: true,
     );
-    if (result == null || result.files.isEmpty) return false;
+    if (result == null || result.files.isEmpty) return null;
 
     final bytes = result.files.single.bytes;
     if (bytes == null) {
       throw const FormatException(kBackupUnreadableMessage);
     }
-    return restoreFromBytes(bytes);
+    return bytes;
   }
 
-  /// Valida y restaura un respaldo ya leído en memoria. Separado de
-  /// [importBackup] para poder probarlo sin el selector de archivos. Cualquier
-  /// fallo sale como [FormatException] con un mensaje apto para el usuario, y
-  /// los datos actuales no se tocan (la validación corre antes de borrar y
-  /// `restoreAllData` es una transacción).
-  Future<bool> restoreFromBytes(Uint8List bytes) async {
+  /// Decodifica y valida un respaldo sin restaurarlo. Lanza
+  /// [FormatException] con un mensaje apto para el usuario si no sirve.
+  static Map<String, dynamic> parseBackup(Uint8List bytes) {
     if (bytes.isEmpty) throw const FormatException(kBackupUnreadableMessage);
     if (bytes.length > kMaxBackupBytes) {
       throw const FormatException(kBackupTooLargeMessage);
@@ -74,8 +80,18 @@ class BackupRepository {
       throw const FormatException(kBackupNotARespaldoMessage);
     }
     validateBackupData(decoded);
+    return decoded as Map<String, dynamic>;
+  }
+
+  /// Valida y restaura un respaldo ya leído en memoria. Separado de
+  /// [importBackup] para poder probarlo sin el selector de archivos. Cualquier
+  /// fallo sale como [FormatException] con un mensaje apto para el usuario, y
+  /// los datos actuales no se tocan (la validación corre antes de borrar y
+  /// `restoreAllData` es una transacción).
+  Future<bool> restoreFromBytes(Uint8List bytes) async {
+    final data = parseBackup(bytes);
     try {
-      await _db.restoreAllData(decoded as Map<String, dynamic>);
+      await _db.restoreAllData(data);
     } on TypeError {
       // Campos con tipo equivocado dentro de una fila.
       throw const FormatException(kBackupCorruptMessage);

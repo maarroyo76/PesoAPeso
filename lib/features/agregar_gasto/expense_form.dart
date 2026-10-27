@@ -8,9 +8,13 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
+import '../../core/widgets/undo_snack_bar.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 
-typedef ExpenseFormSubmit = Future<void> Function({
+/// Guarda el gasto. Al registrar uno nuevo devuelve cómo deshacerlo (UX01);
+/// al editar devuelve null.
+typedef ExpenseFormSubmit = Future<UndoAction?> Function({
   required String categoryId,
   required int amount,
   required DateTime date,
@@ -30,6 +34,7 @@ class ExpenseForm extends ConsumerStatefulWidget {
     this.initialNote = '',
     this.initialRecurring = false,
     this.isEditing = false,
+    this.focusAmount = false,
     required this.onSubmit,
     this.onSaved,
   });
@@ -44,6 +49,11 @@ class ExpenseForm extends ConsumerStatefulWidget {
   /// formulario tras guardar (llama a [onSaved] en su lugar).
   final bool isEditing;
 
+  /// UX03: con true, el campo de monto toma el foco (y abre el teclado).
+  /// AgregarScreen lo activa al entrar a su pestaña y lo desactiva al salir,
+  /// porque vive en un IndexedStack y se construye aunque no esté visible.
+  final bool focusAmount;
+
   final ExpenseFormSubmit onSubmit;
 
   /// Se llama después de un guardado exitoso, solo relevante en modo edición
@@ -55,12 +65,12 @@ class ExpenseForm extends ConsumerStatefulWidget {
 }
 
 class _ExpenseFormState extends ConsumerState<ExpenseForm> {
-  late final _amountController =
-      TextEditingController(
-          text: widget.initialAmount == null
-              ? ''
-              : formatAmountInput(widget.initialAmount!));
+  late final _amountController = TextEditingController(
+      text: widget.initialAmount == null
+          ? ''
+          : formatAmountInput(widget.initialAmount!));
   late final _noteController = TextEditingController(text: widget.initialNote);
+  final _amountFocus = FocusNode();
   String? _selectedCategoryId;
   late DateTime _selectedDate = widget.initialDate ?? DateTime.now();
   late bool _isRecurring = widget.initialRecurring;
@@ -72,52 +82,47 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   void initState() {
     super.initState();
     _selectedCategoryId = widget.initialCategoryId;
+    if (!widget.isEditing && _selectedCategoryId == null) {
+      _preselectLastUsedCategory();
+    }
+    if (widget.focusAmount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.focusAmount) _amountFocus.requestFocus();
+      });
+    }
   }
+
+  @override
+  void didUpdateWidget(ExpenseForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusAmount == oldWidget.focusAmount) return;
+    if (widget.focusAmount) {
+      _amountFocus.requestFocus();
+    } else {
+      FocusScope.of(context).unfocus();
+    }
+  }
+
+  /// UX03: la categoría del último gasto registrado, si sigue existiendo y
+  /// el usuario no eligió otra mientras tanto.
+  Future<void> _preselectLastUsedCategory() async {
+    final lastId =
+        await ref.read(transactionsRepositoryProvider).lastUsedCategoryId();
+    if (!mounted || lastId == null) return;
+    final categories = ref.read(categoriesProvider).valueOrNull;
+    if (categories != null && !categories.any((c) => c.id == lastId)) return;
+    if (_userPickedCategory) return;
+    setState(() => _selectedCategoryId = lastId);
+  }
+
+  bool _userPickedCategory = false;
 
   @override
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
+    _amountFocus.dispose();
     super.dispose();
-  }
-
-  Future<bool> _confirmAdd(int amount, String categoryId) async {
-    final categories = ref.read(categoriesProvider).valueOrNull ?? const [];
-    Category? category;
-    for (final c in categories) {
-      if (c.id == categoryId) {
-        category = c;
-        break;
-      }
-    }
-    final note = _noteController.text.trim();
-    return await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppColors.paper,
-            title: const Text('Confirmar gasto',
-                style: TextStyle(fontSize: 16, color: AppColors.ink)),
-            content: Text(
-              '${currencyFmt.format(amount)} en '
-              '${category?.name ?? 'categoría desconocida'}'
-              '${note.isNotEmpty ? ' — $note' : ''}',
-              style: const TextStyle(color: AppColors.inkSoft),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancelar',
-                    style: TextStyle(color: AppColors.inkSoft)),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Registrar'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
   }
 
   Future<void> _handleSubmit() async {
@@ -126,10 +131,10 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     final categoryId = _selectedCategoryId;
     if (amount == null || categoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(kInvalidAmountMessage),
-          duration: Duration(milliseconds: 1500),
-          backgroundColor: AppColors.rust,
+        SnackBar(
+          content: const Text(kInvalidAmountMessage),
+          duration: const Duration(milliseconds: 1500),
+          backgroundColor: context.colors.rust,
         ),
       );
       return;
@@ -139,19 +144,28 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     _submitting = true;
     try {
       await _submit(amount, categoryId);
+    } catch (e) {
+      // UX09: mensaje para el usuario; el formulario conserva lo ingresado.
+      debugPrint('ExpenseForm: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isEditing
+                ? 'No se pudieron guardar los cambios. Inténtalo de nuevo.'
+                : 'No se pudo registrar el gasto. Inténtalo de nuevo.'),
+            backgroundColor: context.colors.rust,
+          ),
+        );
+      }
     } finally {
       _submitting = false;
     }
   }
 
+  /// UX01: un gasto nuevo se guarda sin diálogo de confirmación; el aviso
+  /// posterior permite deshacerlo.
   Future<void> _submit(int amount, String categoryId) async {
-
-    if (!widget.isEditing) {
-      final confirmed = await _confirmAdd(amount, categoryId);
-      if (!confirmed || !mounted) return;
-    }
-
-    await widget.onSubmit(
+    final undo = await widget.onSubmit(
       categoryId: categoryId,
       amount: amount,
       date: _selectedDate,
@@ -162,10 +176,10 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
 
     if (widget.isEditing) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cambios guardados'),
-          duration: Duration(milliseconds: 900),
-          backgroundColor: AppColors.ink,
+        SnackBar(
+          content: const Text('Cambios guardados'),
+          duration: const Duration(milliseconds: 900),
+          backgroundColor: context.colors.ink,
         ),
       );
       widget.onSaved?.call();
@@ -180,13 +194,11 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
       _selectedDate = DateTime.now();
       _justSubmitted = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Registrado — ${currencyFmt.format(amount)}'),
-        duration: const Duration(milliseconds: 900),
-        backgroundColor: AppColors.ink,
-      ),
-    );
+    final message = 'Registrado · ${currencyFmt.format(amount)}';
+    if (undo != null) {
+      showUndoSnackBar(ScaffoldMessenger.of(context),
+          message: message, onUndo: undo);
+    }
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _justSubmitted = false);
     });
@@ -230,8 +242,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
 
     return categoriesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) =>
-          Center(child: Text('Error al cargar categorías: $err')),
+      error: (err, _) => LoadError(err),
       data: (categories) {
         if (categories.isEmpty) {
           return const Center(
@@ -242,7 +253,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Monto', style: _labelStyle),
+            Text('Monto', style: _labelStyle),
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
@@ -250,7 +261,9 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
-                    color: _justSubmitted ? AppColors.green : AppColors.ink,
+                    color: _justSubmitted
+                        ? context.colors.green
+                        : context.colors.ink,
                     width: 2,
                   ),
                 ),
@@ -262,6 +275,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                   Expanded(
                     child: TextField(
                       controller: _amountController,
+                      focusNode: _amountFocus,
                       keyboardType: TextInputType.number,
                       inputFormatters: amountInputFormatters,
                       textInputAction: TextInputAction.next,
@@ -275,7 +289,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                 ],
               ),
             ),
-            const Text('Categoría', style: _labelStyle),
+            Text('Categoría', style: _labelStyle),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -284,27 +298,32 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                   .map((c) => ExpenseCategoryChip(
                         category: c,
                         selected: c.id == _selectedCategoryId,
-                        onTap: () => setState(() => _selectedCategoryId = c.id),
+                        onTap: () => setState(() {
+                          _selectedCategoryId = c.id;
+                          _userPickedCategory = true;
+                        }),
                       ))
                   .toList(),
             ),
             const SizedBox(height: 16),
-            const Text('Fecha', style: _labelStyle),
+            Text('Fecha', style: _labelStyle),
             const SizedBox(height: 8),
             InkWell(
               onTap: _pickDate,
               borderRadius: BorderRadius.circular(8),
               child: Container(
+                // Al menos 48 px de alto: área táctil mínima de Android.
+                constraints: const BoxConstraints(minHeight: 48),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.rule),
+                  border: Border.all(color: context.colors.rule),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 16, color: AppColors.inkSoft),
+                    Icon(Icons.calendar_today_outlined,
+                        size: 16, color: context.colors.inkSoft),
                     const SizedBox(width: 10),
                     Text(
                       _formatSelectedDate(),
@@ -312,14 +331,14 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                           fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                     const Spacer(),
-                    const Icon(Icons.chevron_right,
-                        size: 16, color: AppColors.inkSoft),
+                    Icon(Icons.chevron_right,
+                        size: 16, color: context.colors.inkSoft),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Nota (opcional)', style: _labelStyle),
+            Text('Nota (opcional)', style: _labelStyle),
             TextField(
               controller: _noteController,
               maxLength: kMaxNoteLength,
@@ -339,10 +358,11 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Gasto recurrente',
                     style: TextStyle(fontSize: 13)),
-                subtitle: const Text('Se repite cada mes',
-                    style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
+                subtitle: Text('Se repite cada mes',
+                    style:
+                        TextStyle(fontSize: 11, color: context.colors.inkSoft)),
                 value: _isRecurring,
-                activeThumbColor: AppColors.green,
+                activeThumbColor: context.colors.green,
                 onChanged: (v) => setState(() => _isRecurring = v),
               ),
               const SizedBox(height: 16),
@@ -358,8 +378,9 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                   duration: const Duration(milliseconds: 100),
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor:
-                          _justSubmitted ? AppColors.green : AppColors.ink,
+                      backgroundColor: _justSubmitted
+                          ? context.colors.green
+                          : context.colors.ink,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: _handleSubmit,
@@ -392,7 +413,8 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     );
   }
 
-  static const _labelStyle = TextStyle(fontSize: 12, color: AppColors.inkSoft);
+  TextStyle get _labelStyle =>
+      TextStyle(fontSize: 12, color: context.colors.inkSoft);
 }
 
 class ExpenseCategoryChip extends StatelessWidget {
@@ -408,7 +430,7 @@ class ExpenseCategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(category.colorValue);
+    final color = context.colors.category(category.colorValue);
     return AnimatedScale(
       scale: selected ? 1.1 : 1.0,
       duration: const Duration(milliseconds: 220),
@@ -424,7 +446,7 @@ class ExpenseCategoryChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               border: Border.all(
-                color: selected ? color : AppColors.rule,
+                color: selected ? color : context.colors.rule,
                 width: selected ? 2 : 1.5,
               ),
               borderRadius: BorderRadius.circular(10),
@@ -450,16 +472,20 @@ class ExpenseCategoryChip extends StatelessWidget {
                   child: Icon(
                     iconForCategory(category),
                     size: 18,
-                    color: selected ? color : AppColors.inkSoft,
+                    color: selected ? color : context.colors.inkSoft,
                   ),
                 ),
                 const SizedBox(height: 4),
                 AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 200),
+                  // UX07: el texto va en tinta y no en el color de la
+                  // categoría, que puede no llegar a 4,5:1 sobre el papel (el
+                  // usuario elige el color). El color queda en borde e ícono.
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                    color: selected ? color : AppColors.inkSoft,
+                    color:
+                        selected ? context.colors.ink : context.colors.inkSoft,
                   ),
                   child: Text(category.name),
                 ),

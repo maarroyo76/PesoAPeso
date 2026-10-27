@@ -5,6 +5,7 @@ import '../../core/providers/app_providers.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 
 /// RF03: crear, editar y eliminar categorías.
@@ -65,11 +66,12 @@ class CategoriasScreen extends ConsumerWidget {
     final categoriesAsync = ref.watch(categoriesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.paper,
+      backgroundColor: context.colors.paper,
       appBar: AppBar(
         title: const Text('Categorías'),
         actions: [
           IconButton(
+            tooltip: 'Nueva categoría',
             icon: const Icon(Icons.add),
             onPressed: () => showCategoryEditor(context, ref),
           ),
@@ -77,11 +79,11 @@ class CategoriasScreen extends ConsumerWidget {
       ),
       body: categoriesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => LoadError(e),
         data: (categories) => categories.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text('No hay categorías todavía.',
-                    style: TextStyle(color: AppColors.inkSoft)))
+                    style: TextStyle(color: context.colors.inkSoft)))
             : ListView.separated(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: categories.length,
@@ -89,7 +91,7 @@ class CategoriasScreen extends ConsumerWidget {
                     const Divider(height: 1, indent: 20),
                 itemBuilder: (context, i) {
                   final c = categories[i];
-                  final color = Color(c.colorValue);
+                  final color = context.colors.category(c.colorValue);
                   return ListTile(
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -121,8 +123,9 @@ class CategoriasScreen extends ConsumerWidget {
                         style: const TextStyle(fontWeight: FontWeight.w500)),
                     onTap: () => showCategoryEditor(context, ref, category: c),
                     trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          color: AppColors.inkSoft),
+                      tooltip: 'Eliminar ${c.name}',
+                      icon: Icon(Icons.delete_outline,
+                          color: context.colors.inkSoft),
                       onPressed: () => confirmDeleteCategory(context, ref, c),
                     ),
                   );
@@ -148,9 +151,9 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialogState) => AlertDialog(
-        backgroundColor: AppColors.paper,
+        backgroundColor: context.colors.paper,
         title: Text(category == null ? 'Nueva categoría' : 'Editar categoría',
-            style: const TextStyle(fontSize: 16, color: AppColors.ink)),
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: SizedBox(
           width: 320,
           child: SingleChildScrollView(
@@ -170,11 +173,11 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('COLOR',
+                Text('COLOR',
                     style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         letterSpacing: 1.2,
-                        color: AppColors.inkSoft)),
+                        color: context.colors.inkSoft)),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 44,
@@ -186,24 +189,31 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                       final cv = kCategoryColorPalette[i];
                       final selected = cv == selectedColor;
                       return Center(
-                        child: GestureDetector(
-                          onTap: () =>
-                              setDialogState(() => selectedColor = cv),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Color(cv),
-                              shape: BoxShape.circle,
-                              border: selected
-                                  ? Border.all(color: AppColors.ink, width: 2)
+                        child: Semantics(
+                          button: true,
+                          selected: selected,
+                          label: 'Color ${i + 1} de '
+                              '${kCategoryColorPalette.length}',
+                          child: GestureDetector(
+                            onTap: () =>
+                                setDialogState(() => selectedColor = cv),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: context.colors.category(cv),
+                                shape: BoxShape.circle,
+                                border: selected
+                                    ? Border.all(
+                                        color: context.colors.ink, width: 2)
+                                    : null,
+                              ),
+                              child: selected
+                                  ? Icon(Icons.check,
+                                      size: 16, color: context.colors.paper)
                                   : null,
                             ),
-                            child: selected
-                                ? const Icon(Icons.check,
-                                    size: 16, color: Colors.white)
-                                : null,
                           ),
                         ),
                       );
@@ -211,11 +221,11 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text('ÍCONO',
+                Text('ÍCONO',
                     style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         letterSpacing: 1.2,
-                        color: AppColors.inkSoft)),
+                        color: context.colors.inkSoft)),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 48,
@@ -228,29 +238,36 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                       final selected = entry.key == selectedIconKey;
                       final previewColor = Color(selectedColor);
                       return Center(
-                        child: GestureDetector(
-                          onTap: () => setDialogState(
-                              () => selectedIconKey = entry.key),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? previewColor.withAlpha(40)
-                                  : AppColors.paperDeep,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color:
-                                    selected ? previewColor : AppColors.rule,
-                                width: selected ? 2 : 1,
-                              ),
-                            ),
-                            child: Icon(entry.value,
-                                size: 18,
+                        child: Semantics(
+                          button: true,
+                          selected: selected,
+                          label: 'Ícono '
+                              '${kCategoryIconLabels[entry.key] ?? entry.key}',
+                          child: GestureDetector(
+                            onTap: () => setDialogState(
+                                () => selectedIconKey = entry.key),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
                                 color: selected
-                                    ? previewColor
-                                    : AppColors.inkSoft),
+                                    ? previewColor.withAlpha(40)
+                                    : context.colors.paperDeep,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: selected
+                                      ? previewColor
+                                      : context.colors.rule,
+                                  width: selected ? 2 : 1,
+                                ),
+                              ),
+                              child: Icon(entry.value,
+                                  size: 18,
+                                  color: selected
+                                      ? previewColor
+                                      : context.colors.inkSoft),
+                            ),
                           ),
                         ),
                       );
@@ -264,11 +281,11 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppColors.inkSoft)),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.ink),
             onPressed: () {
               final name = nameController.text.trim();
               if (name.isEmpty) return;
@@ -322,13 +339,13 @@ Future<void> confirmDeleteCategory(
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.paper,
-        title: const Text('No se puede eliminar',
-            style: TextStyle(fontSize: 16, color: AppColors.ink)),
+        backgroundColor: context.colors.paper,
+        title: Text('No se puede eliminar',
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: Text(
           '"${category.name}" tiene gastos, recurrentes o accesos rápidos asociados. '
           'Elimina o reasigna esos elementos primero.',
-          style: const TextStyle(color: AppColors.inkSoft),
+          style: TextStyle(color: context.colors.inkSoft),
         ),
         actions: [
           TextButton(
@@ -344,20 +361,20 @@ Future<void> confirmDeleteCategory(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: AppColors.paper,
-      title: const Text('Eliminar categoría',
-          style: TextStyle(fontSize: 16, color: AppColors.ink)),
+      backgroundColor: context.colors.paper,
+      title: Text('Eliminar categoría',
+          style: TextStyle(fontSize: 16, color: context.colors.ink)),
       content: Text(
           '¿Eliminar "${category.name}"? Esta acción no se puede deshacer.',
-          style: const TextStyle(color: AppColors.inkSoft)),
+          style: TextStyle(color: context.colors.inkSoft)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppColors.inkSoft)),
+          child:
+              Text('Cancelar', style: TextStyle(color: context.colors.inkSoft)),
         ),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.rust),
+          style: FilledButton.styleFrom(backgroundColor: context.colors.rust),
           onPressed: () => Navigator.pop(ctx, true),
           child: const Text('Eliminar'),
         ),

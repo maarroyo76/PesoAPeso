@@ -35,3 +35,30 @@ int resolveMonthlyBudgetForMonth(
   }
   return latest?.amount ?? 0;
 }
+
+/// RF50: ajustes de un solo mes que corresponden a [month]. No se heredan.
+List<MonthlyAdjustment> adjustmentsForMonth(
+        List<MonthlyAdjustment> allAdjustments, DateTime month) =>
+    allAdjustments
+        .where((a) => a.year == month.year && a.month == month.month)
+        .toList();
+
+/// Presupuesto por categoría vigente en el mes: el base heredado
+/// ([resolveBudgetsForMonth]) más los ajustes de ese mes con categoría.
+Map<String, int> withCategoryAdjustments(
+    Map<String, int> baseBudgets, List<MonthlyAdjustment> monthAdjustments) {
+  final result = {...baseBudgets};
+  for (final a in monthAdjustments) {
+    final id = a.categoryId;
+    if (id == null) continue;
+    result[id] = (result[id] ?? 0) + a.amount;
+  }
+  return result;
+}
+
+/// Presupuesto total vigente en el mes: el base más TODOS los ajustes del
+/// mes. Un ajuste a una categoría también sube el total, porque es plata
+/// extra y no una reasignación (si no, la categoría quedaría sobreasignada).
+int withTotalAdjustments(
+        int baseTotal, List<MonthlyAdjustment> monthAdjustments) =>
+    monthAdjustments.fold(baseTotal, (sum, a) => sum + a.amount);

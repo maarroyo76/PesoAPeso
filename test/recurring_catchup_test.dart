@@ -143,8 +143,7 @@ void main() {
     );
 
     // 29 de abril: todavía no llega el último día, no debe generar.
-    expect(await db.runRecurringCatchUp(today: DateTime(2026, 4, 29)),
-        isEmpty);
+    expect(await db.runRecurringCatchUp(today: DateTime(2026, 4, 29)), isEmpty);
 
     // 30 de abril: último día del mes, debe generar con fecha 30.
     final generated =
@@ -192,11 +191,10 @@ void main() {
       today: DateTime(2026, 5, 20),
     );
 
-    expect(await db.runRecurringCatchUp(today: DateTime(2026, 5, 21)),
-        isEmpty,
+    expect(await db.runRecurringCatchUp(today: DateTime(2026, 5, 21)), isEmpty,
         reason: 'mayo ya se dio por cubierto al reactivar');
-    expect(await db.runRecurringCatchUp(today: DateTime(2026, 6, 1)),
-        hasLength(1),
+    expect(
+        await db.runRecurringCatchUp(today: DateTime(2026, 6, 1)), hasLength(1),
         reason: 'junio sí se genera con normalidad');
   });
 

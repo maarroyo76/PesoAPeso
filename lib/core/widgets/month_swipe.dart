@@ -106,17 +106,23 @@ class SwipeHint extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       alignment: Alignment.topCenter,
       child: visible
-          ? const Padding(
-              padding: EdgeInsets.only(top: 8),
+          ? Padding(
+              padding: const EdgeInsets.only(top: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.chevron_left, size: 14, color: AppColors.inkSoft),
-                  SizedBox(width: 4),
-                  Text('Desliza para cambiar de mes',
-                      style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
-                  SizedBox(width: 4),
-                  Icon(Icons.chevron_right, size: 14, color: AppColors.inkSoft),
+                  Icon(Icons.chevron_left,
+                      size: 14, color: context.colors.inkSoft),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text('Desliza para cambiar de mes',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 11, color: context.colors.inkSoft)),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right,
+                      size: 14, color: context.colors.inkSoft),
                 ],
               ),
             )

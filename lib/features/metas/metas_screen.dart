@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/ledger_paper.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import 'goal_detail_sheet.dart';
 
@@ -19,11 +20,11 @@ class MetasScreen extends ConsumerWidget {
     final totalsAsync = ref.watch(savingsTotalsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.paper,
+      backgroundColor: context.colors.paper,
       body: SafeArea(
         child: goalsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => LoadError(e),
           data: (goals) {
             final totals = totalsAsync.valueOrNull ?? const {};
             return ListView(
@@ -32,22 +33,26 @@ class MetasScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Metas de ahorro',
-                        style: Theme.of(context).textTheme.headlineMedium),
+                    Expanded(
+                      child: Text('Metas de ahorro',
+                          style: Theme.of(context).textTheme.headlineMedium),
+                    ),
                     IconButton(
+                      tooltip: 'Nueva meta',
                       icon: const Icon(Icons.add_circle_outline),
-                      color: AppColors.ink,
+                      color: context.colors.ink,
                       onPressed: () => showGoalEditor(context, ref),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 if (goals.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Text(
                       'Todavía no tienes metas de ahorro. Toca "+" para crear una.',
-                      style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                      style: TextStyle(
+                          color: context.colors.inkSoft, fontSize: 13),
                     ),
                   )
                 else
@@ -57,7 +62,7 @@ class MetasScreen extends ConsumerWidget {
                         onTap: () => showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
-                          backgroundColor: AppColors.paper,
+                          backgroundColor: context.colors.paper,
                           shape: const RoundedRectangleBorder(
                             borderRadius:
                                 BorderRadius.vertical(top: Radius.circular(16)),
@@ -77,9 +82,8 @@ class MetasScreen extends ConsumerWidget {
 Future<void> showGoalEditor(BuildContext context, WidgetRef ref,
     {SavingsGoal? goal}) async {
   final nameController = TextEditingController(text: goal?.name ?? '');
-  final targetController =
-      TextEditingController(
-          text: goal == null ? '' : formatAmountInput(goal.targetAmount));
+  final targetController = TextEditingController(
+      text: goal == null ? '' : formatAmountInput(goal.targetAmount));
 
   String? nameError;
   String? targetError;
@@ -88,59 +92,59 @@ Future<void> showGoalEditor(BuildContext context, WidgetRef ref,
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialogState) => AlertDialog(
-      backgroundColor: AppColors.paper,
-      title: Text(goal == null ? 'Nueva meta' : 'Editar meta',
-          style: const TextStyle(fontSize: 16, color: AppColors.ink)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            maxLength: kMaxGoalNameLength,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-                labelText: 'Nombre',
-                errorText: nameError,
-                border: const UnderlineInputBorder()),
+        backgroundColor: context.colors.paper,
+        title: Text(goal == null ? 'Nueva meta' : 'Editar meta',
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              maxLength: kMaxGoalNameLength,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                  labelText: 'Nombre',
+                  errorText: nameError,
+                  border: const UnderlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: targetController,
+              keyboardType: TextInputType.number,
+              inputFormatters: amountInputFormatters,
+              decoration: InputDecoration(
+                  labelText: 'Monto objetivo',
+                  prefixText: '\$ ',
+                  errorText: targetError,
+                  border: const UnderlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: targetController,
-            keyboardType: TextInputType.number,
-            inputFormatters: amountInputFormatters,
-            decoration: InputDecoration(
-                labelText: 'Monto objetivo',
-                prefixText: '\$ ',
-                errorText: targetError,
-                border: const UnderlineInputBorder()),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.colors.ink),
+            onPressed: () {
+              final target = parsePositiveAmount(targetController.text);
+              final nameEmpty = nameController.text.trim().isEmpty;
+              if (nameEmpty || target == null) {
+                setDialogState(() {
+                  nameError = nameEmpty ? 'Escribe un nombre' : null;
+                  targetError = target == null ? kInvalidAmountMessage : null;
+                });
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Guardar'),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancelar',
-              style: TextStyle(color: AppColors.inkSoft)),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
-          onPressed: () {
-            final target = parsePositiveAmount(targetController.text);
-            final nameEmpty = nameController.text.trim().isEmpty;
-            if (nameEmpty || target == null) {
-              setDialogState(() {
-                nameError = nameEmpty ? 'Escribe un nombre' : null;
-                targetError = target == null ? kInvalidAmountMessage : null;
-              });
-              return;
-            }
-            Navigator.pop(ctx, true);
-          },
-          child: const Text('Guardar'),
-        ),
-      ],
-    ),
     ),
   );
 
@@ -177,9 +181,9 @@ class _GoalCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.paperDeep,
+            color: context.colors.paperDeep,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.rule),
+            border: Border.all(color: context.colors.rule),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,27 +197,29 @@ class _GoalCard extends StatelessWidget {
                             fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
                   if (complete)
-                    const Icon(Icons.emoji_events_outlined,
-                        size: 18, color: AppColors.green),
+                    Icon(Icons.emoji_events_outlined,
+                        size: 18, color: context.colors.green),
                 ],
               ),
               const SizedBox(height: 10),
               LedgerCuadreBar(
                 ratio: ratio,
-                color: complete ? AppColors.green : AppColors.ink,
+                color: complete ? context.colors.green : context.colors.ink,
+                semanticsLabel: 'Avance de ${goal.name}',
+                semanticsValue:
+                    goalProgressSemantics(contributed, goal.targetAmount),
               ),
               const SizedBox(height: 6),
               Text.rich(
                 TextSpan(
-                  style:
-                      const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                  style: TextStyle(fontSize: 12, color: context.colors.inkSoft),
                   children: [
                     TextSpan(
                         text: currencyFmt.format(contributed),
                         style: appAmountTextStyle.copyWith(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.ink)),
+                            color: context.colors.ink)),
                     TextSpan(
                         text: ' de ${currencyFmt.format(goal.targetAmount)}'),
                   ],

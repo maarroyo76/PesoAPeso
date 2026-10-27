@@ -26,23 +26,29 @@ class MonthSelector extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         IconButton(
+          tooltip: 'Mes anterior',
           icon: const Icon(Icons.chevron_left),
-          color: AppColors.ink,
+          color: context.colors.ink,
           onPressed: onPrev,
         ),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ink),
-            ),
-            SizedBox(
-              height: 18,
-              child: AnimatedOpacity(
+        // Expanded + textos que envuelven: con letra grande del sistema el
+        // mes y el atajo no caben en una línea junto a las flechas (UX07).
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.ink),
+              ),
+              // Con opacidad 0 el atajo sigue ocupando su espacio, así que el
+              // selector no cambia de alto (antes se fijaba con un SizedBox de
+              // 18 px, que se rompía con letra grande).
+              AnimatedOpacity(
                 opacity: onToday != null ? 1 : 0,
                 duration: const Duration(milliseconds: 150),
                 child: IgnorePointer(
@@ -50,23 +56,25 @@ class MonthSelector extends StatelessWidget {
                   child: InkWell(
                     onTap: onToday,
                     borderRadius: BorderRadius.circular(4),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Text('Volver al mes actual',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.green,
+                              color: context.colors.green,
                               fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         IconButton(
+          tooltip: 'Mes siguiente',
           icon: const Icon(Icons.chevron_right),
-          color: onNext != null ? AppColors.ink : AppColors.rule,
+          color: onNext != null ? context.colors.ink : context.colors.rule,
           onPressed: onNext,
         ),
       ],

@@ -48,4 +48,19 @@ class CategoriesRepository {
 
   Future<void> setMonthlyBudgetForMonth(DateTime month, int amount) =>
       _db.setMonthlyBudgetForMonth(month, amount);
+
+  /// RF50: ajustes de presupuesto que valen solo para su mes.
+  Stream<List<MonthlyAdjustment>> watchAllAdjustments() =>
+      _db.watchAllAdjustments();
+
+  Future<void> addAdjustment({
+    required DateTime month,
+    String? categoryId,
+    required int amount,
+    required String reason,
+  }) =>
+      _db.insertAdjustment(
+          month: month, categoryId: categoryId, amount: amount, reason: reason);
+
+  Future<void> deleteAdjustment(int id) => _db.deleteAdjustment(id);
 }

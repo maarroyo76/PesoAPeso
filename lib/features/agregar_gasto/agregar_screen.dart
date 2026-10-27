@@ -8,57 +8,50 @@ import '../../core/utils/amount_input.dart';
 import '../../core/utils/budget_alert.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/widgets/section_label.dart';
+import '../../core/widgets/undo_snack_bar.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import 'expense_form.dart';
 
 class AgregarScreen extends ConsumerWidget {
-  const AgregarScreen({super.key});
+  const AgregarScreen({super.key, this.active = false});
 
-  Future<bool> _confirmQuickAdd(
-      BuildContext context, QuickExpenseTemplate qa) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppColors.paper,
-            title: const Text('Confirmar gasto',
-                style: TextStyle(fontSize: 16, color: AppColors.ink)),
-            content: Text(
-              '${qa.label} — ${currencyFmt.format(qa.amount)}',
-              style: const TextStyle(color: AppColors.inkSoft),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancelar',
-                    style: TextStyle(color: AppColors.inkSoft)),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Registrar'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
+  /// true mientras esta pestaña es la visible (UX03: foco en el monto).
+  final bool active;
 
-  /// Devuelve true si el gasto se registró (false si el usuario canceló la
-  /// confirmación), para que el chip solo muestre el feedback "✓ Listo"
-  /// cuando realmente se agregó algo.
+  /// UX01: un toque registra el gasto de inmediato; el aviso posterior
+  /// permite deshacerlo. Devuelve true para que el chip muestre "✓ Listo".
   Future<bool> _handleQuickAdd(
       BuildContext context, WidgetRef ref, QuickExpenseTemplate qa) async {
-    final confirmed = await _confirmQuickAdd(context, qa);
-    if (!confirmed || !context.mounted) return false;
     final date = DateTime.now();
-    await ref.read(transactionsRepositoryProvider).addTransaction(
-          categoryId: qa.categoryId,
-          amount: qa.amount,
-          date: date,
-          note: qa.label,
-        );
+    final txRepo = ref.read(transactionsRepositoryProvider);
+    final int id;
+    try {
+      id = await txRepo.addTransaction(
+        categoryId: qa.categoryId,
+        amount: qa.amount,
+        date: date,
+        note: qa.label,
+      );
+    } catch (e) {
+      // UX09: mensaje para el usuario en vez del error técnico.
+      debugPrint('Acceso rápido: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              const Text('No se pudo registrar el gasto. Inténtalo de nuevo.'),
+          backgroundColor: context.colors.rust,
+        ));
+      }
+      return false;
+    }
     HapticFeedback.lightImpact();
     if (!context.mounted) return true;
+    showUndoSnackBar(
+      ScaffoldMessenger.of(context),
+      message: 'Registrado · ${qa.label} ${currencyFmt.format(qa.amount)}',
+      onUndo: () => txRepo.deleteTransaction(id),
+    );
     // RF18: aviso inmediato en pantalla si este gasto deja la categoría en
     // 80% o más de su presupuesto del mes.
     final alert =
@@ -80,15 +73,18 @@ class AgregarScreen extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SectionLabel('Registro rápido'),
-            InkWell(
-              onTap: () {
+            const Flexible(child: SectionLabel('Registro rápido')),
+            // IconButton y no un InkWell sobre el ícono: área táctil de 48 px.
+            IconButton(
+              tooltip: 'Nuevo acceso rápido',
+              iconSize: 18,
+              color: context.colors.inkSoft,
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: () {
                 final categories = categoriesAsync.valueOrNull ?? const [];
                 if (categories.isEmpty) return;
                 _showQuickTemplateEditor(context, ref, categories);
               },
-              child: const Icon(Icons.add_circle_outline,
-                  size: 18, color: AppColors.inkSoft),
             ),
           ],
         ),
@@ -96,19 +92,22 @@ class AgregarScreen extends ConsumerWidget {
         quickTemplatesAsync.when(
           loading: () => const SizedBox(
               height: 64, child: Center(child: CircularProgressIndicator())),
-          error: (e, _) => Text('Error: $e'),
+          error: (e, _) => LoadError(e, compact: true),
           data: (templates) {
             if (templates.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'Sin accesos rápidos todavía. Toca "+" para crear uno.',
-                  style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                  style: TextStyle(color: context.colors.inkSoft, fontSize: 12),
                 ),
               );
             }
+            // UX07: la fila crece con la letra del sistema (64 px al 100%).
+            final textScale =
+                MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 3.0);
             return SizedBox(
-              height: 64,
+              height: 20 + 44 * textScale,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: templates.length,
@@ -135,6 +134,7 @@ class AgregarScreen extends ConsumerWidget {
         const SectionLabel('Gasto manual'),
         const SizedBox(height: 12),
         ExpenseForm(
+          focusAmount: active,
           onSubmit: ({
             required categoryId,
             required amount,
@@ -142,27 +142,37 @@ class AgregarScreen extends ConsumerWidget {
             required note,
             required recurring,
           }) async {
-            await ref.read(transactionsRepositoryProvider).addTransaction(
-                  categoryId: categoryId,
-                  amount: amount,
-                  date: date,
-                  note: note,
-                  isRecurring: recurring,
-                );
-            if (recurring) {
-              // RF12: además de registrar el gasto de hoy, crea la plantilla
-              // que el catch-up usará los meses siguientes.
-              await ref
-                  .read(recurringTemplatesRepositoryProvider)
-                  .createTemplate(
+            final txRepo = ref.read(transactionsRepositoryProvider);
+            final templatesRepo =
+                ref.read(recurringTemplatesRepositoryProvider);
+            // RF12: además de registrar el gasto de hoy, crea la plantilla
+            // que el catch-up usará los meses siguientes. Se crea primero
+            // para que este gasto también quede enlazado a ella (I4).
+            final templateId = recurring
+                ? await templatesRepo.createTemplate(
                     categoryId: categoryId,
                     amount: amount,
                     note: note,
                     dayOfMonth: date.day,
                     initialYearMonth: date.year * 100 + date.month,
-                  );
+                  )
+                : null;
+            final id = await txRepo.addTransaction(
+              categoryId: categoryId,
+              amount: amount,
+              date: date,
+              note: note,
+              isRecurring: recurring,
+              recurringTemplateId: templateId,
+            );
+            Future<void> undo() async {
+              await txRepo.deleteTransaction(id);
+              if (templateId != null) {
+                await templatesRepo.deleteTemplate(templateId);
+              }
             }
-            if (!context.mounted) return;
+
+            if (!context.mounted) return undo;
             // RF18: aviso inmediato en pantalla si este gasto deja la
             // categoría en 80% o más de su presupuesto del mes.
             final alert =
@@ -170,6 +180,7 @@ class AgregarScreen extends ConsumerWidget {
             if (alert != null && context.mounted) {
               showBudgetAlertBanner(context, alert);
             }
+            return undo;
           },
         ),
       ],
@@ -186,9 +197,8 @@ Future<void> _showQuickTemplateEditor(
   QuickExpenseTemplate? template,
 }) async {
   final labelController = TextEditingController(text: template?.label ?? '');
-  final amountController =
-      TextEditingController(
-          text: template == null ? '' : formatAmountInput(template.amount));
+  final amountController = TextEditingController(
+      text: template == null ? '' : formatAmountInput(template.amount));
   var selectedCategoryId = template?.categoryId ?? categories.first.id;
   String? labelError;
   String? amountError;
@@ -197,10 +207,10 @@ Future<void> _showQuickTemplateEditor(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialogState) => AlertDialog(
-        backgroundColor: AppColors.paper,
+        backgroundColor: context.colors.paper,
         title: Text(
           template == null ? 'Nuevo acceso rápido' : 'Editar acceso rápido',
-          style: const TextStyle(fontSize: 16, color: AppColors.ink),
+          style: TextStyle(fontSize: 16, color: context.colors.ink),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -230,8 +240,9 @@ Future<void> _showQuickTemplateEditor(
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Categoría',
-                  style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
+              Text('Categoría',
+                  style:
+                      TextStyle(fontSize: 12, color: context.colors.inkSoft)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -252,16 +263,16 @@ Future<void> _showQuickTemplateEditor(
           if (template != null)
             TextButton(
               onPressed: () => Navigator.pop(ctx, 'delete'),
-              child: const Text('Eliminar',
-                  style: TextStyle(color: AppColors.rust)),
+              child: Text('Eliminar',
+                  style: TextStyle(color: context.colors.rust)),
             ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppColors.inkSoft)),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.ink),
             onPressed: () {
               final amount = parsePositiveAmount(amountController.text);
               final labelEmpty = labelController.text.trim().isEmpty;
@@ -331,52 +342,59 @@ class _QuickAddChipState extends State<_QuickAddChip> {
         duration: const Duration(milliseconds: 100),
         child: Material(
           color: Colors.transparent,
-          child: InkWell(
-            onTap: _handleTap,
-            onLongPress: widget.onLongPress,
-            borderRadius: BorderRadius.circular(10),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: _justAdded ? AppColors.green : AppColors.rule,
+          // UX08: anuncia que mantener presionado edita el acceso rápido.
+          child: Semantics(
+            onLongPressHint: 'editar',
+            child: InkWell(
+              onTap: _handleTap,
+              onLongPress: widget.onLongPress,
+              borderRadius: BorderRadius.circular(10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color:
+                        _justAdded ? context.colors.green : context.colors.rule,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  color: _justAdded
+                      ? context.colors.green.withValues(alpha: 0.15)
+                      : context.colors.paperDeep,
                 ),
-                borderRadius: BorderRadius.circular(10),
-                color: _justAdded
-                    ? AppColors.green.withValues(alpha: 0.15)
-                    : AppColors.paperDeep,
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: _justAdded
-                    ? const Row(
-                        key: ValueKey('done'),
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle,
-                              size: 16, color: AppColors.green),
-                          SizedBox(width: 6),
-                          Text('Listo',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.green)),
-                        ],
-                      )
-                    : Column(
-                        key: const ValueKey('label'),
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(widget.template.label,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w500)),
-                          Text(currencyFmt.format(widget.template.amount),
-                              style: appAmountTextStyle.copyWith(
-                                  fontSize: 11, color: AppColors.inkSoft)),
-                        ],
-                      ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: _justAdded
+                      ? Row(
+                          key: const ValueKey('done'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle,
+                                size: 16, color: context.colors.green),
+                            const SizedBox(width: 6),
+                            Text('Listo',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.green)),
+                          ],
+                        )
+                      : Column(
+                          key: const ValueKey('label'),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(widget.template.label,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w500)),
+                            Text(currencyFmt.format(widget.template.amount),
+                                style: appAmountTextStyle.copyWith(
+                                    fontSize: 11,
+                                    color: context.colors.inkSoft)),
+                          ],
+                        ),
+                ),
               ),
             ),
           ),

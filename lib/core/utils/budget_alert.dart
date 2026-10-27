@@ -40,9 +40,14 @@ Future<BudgetAlertInfo?> checkBudgetAlert(
   }
   if (categoryName == null) return null;
 
-  final allBudgets =
-      await ref.read(categoriesRepositoryProvider).watchAllBudgets().first;
-  final budget = resolveBudgetsForMonth(allBudgets, month)[categoryId] ?? 0;
+  final categoriesRepo = ref.read(categoriesRepositoryProvider);
+  final allBudgets = await categoriesRepo.watchAllBudgets().first;
+  final allAdjustments = await categoriesRepo.watchAllAdjustments().first;
+  final budget = withCategoryAdjustments(
+        resolveBudgetsForMonth(allBudgets, month),
+        adjustmentsForMonth(allAdjustments, month),
+      )[categoryId] ??
+      0;
   if (budget <= 0) return null;
 
   final txs = await ref
@@ -66,21 +71,21 @@ void showBudgetAlertBanner(BuildContext context, BudgetAlertInfo info) {
   messenger.clearMaterialBanners();
   messenger.showMaterialBanner(
     MaterialBanner(
-      backgroundColor: AppColors.rust.withValues(alpha: 0.12),
+      backgroundColor: context.colors.rust.withValues(alpha: 0.12),
       leading: Icon(
         info.isOverBudget ? Icons.error_outline : Icons.warning_amber_outlined,
-        color: AppColors.rust,
+        color: context.colors.rust,
       ),
       content: Text(
         info.isOverBudget
             ? '${info.categoryName} superó su presupuesto del mes ($pct%).'
             : '${info.categoryName} llegó al $pct% de su presupuesto del mes.',
-        style: const TextStyle(color: AppColors.ink, fontSize: 13),
+        style: TextStyle(color: context.colors.ink, fontSize: 13),
       ),
       actions: [
         TextButton(
           onPressed: messenger.hideCurrentMaterialBanner,
-          child: const Text('OK', style: TextStyle(color: AppColors.ink)),
+          child: Text('OK', style: TextStyle(color: context.colors.ink)),
         ),
       ],
     ),

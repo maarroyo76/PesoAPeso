@@ -19,7 +19,7 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(text),
-        backgroundColor: isError ? AppColors.rust : AppColors.ink,
+        backgroundColor: isError ? context.colors.rust : context.colors.ink,
       ),
     );
   }
@@ -39,21 +39,21 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.paper,
-        icon: const Icon(Icons.error_outline, color: AppColors.rust),
+        backgroundColor: context.colors.paper,
+        icon: Icon(Icons.error_outline, color: context.colors.rust),
         title: Text(title,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16, color: AppColors.ink)),
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(message,
-                style: const TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+                style: TextStyle(color: context.colors.inkSoft, fontSize: 13)),
             if (reassurance != null) ...[
               const SizedBox(height: 12),
               Text(reassurance,
-                  style: const TextStyle(
-                      color: AppColors.green,
+                  style: TextStyle(
+                      color: context.colors.green,
                       fontSize: 12,
                       fontWeight: FontWeight.w600)),
             ],
@@ -61,7 +61,7 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
         ),
         actions: [
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.ink),
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Entendido'),
           ),
@@ -92,21 +92,21 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.paper,
-        title: const Text('Restaurar respaldo',
-            style: TextStyle(fontSize: 16, color: AppColors.ink)),
-        content: const Text(
+        backgroundColor: context.colors.paper,
+        title: Text('Restaurar respaldo',
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
+        content: Text(
           'Esto reemplazará TODOS tus datos actuales (gastos, categorías, presupuestos, metas) por los del archivo elegido. Esta acción no se puede deshacer.',
-          style: TextStyle(color: AppColors.inkSoft),
+          style: TextStyle(color: context.colors.inkSoft),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: AppColors.inkSoft)),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.rust),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.rust),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Reemplazar datos'),
           ),
@@ -136,30 +136,30 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.paper,
+      backgroundColor: context.colors.paper,
       appBar: AppBar(title: const Text('Respaldo')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            const Text(
+            Text(
               'Todos tus datos viven solo en este dispositivo. Exporta un '
               'archivo de respaldo periódicamente por si cambias de equipo o '
               'lo necesitas recuperar — funciona completamente sin conexión.',
-              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+              style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Ojo: la base de datos del teléfono está cifrada, pero el '
               'archivo de respaldo NO. Guárdalo en un lugar de confianza.',
-              style: TextStyle(color: AppColors.rust, fontSize: 12),
+              style: TextStyle(color: context.colors.rust, fontSize: 12),
             ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.ink,
+                  backgroundColor: context.colors.ink,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 onPressed: _busy ? null : _export,
@@ -172,8 +172,8 @@ class _RespaldoScreenState extends ConsumerState<RespaldoScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.ink,
-                  side: const BorderSide(color: AppColors.rule),
+                  foregroundColor: context.colors.ink,
+                  side: BorderSide(color: context.colors.rule),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 onPressed: _busy ? null : _import,

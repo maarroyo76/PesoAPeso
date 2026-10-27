@@ -22,7 +22,8 @@ class ThousandsSeparatorFormatter extends TextInputFormatter {
       TextEditingValue oldValue, TextEditingValue newValue) {
     final raw = newValue.text;
     final sel = newValue.selection;
-    final cursor = sel.isValid ? sel.extentOffset.clamp(0, raw.length) : raw.length;
+    final cursor =
+        sel.isValid ? sel.extentOffset.clamp(0, raw.length) : raw.length;
 
     final digits = StringBuffer();
     var digitsBeforeCursor = 0;

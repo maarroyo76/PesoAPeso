@@ -50,7 +50,12 @@ void validateBackupData(Object? decoded) {
     'savingsContributions',
     'savingsQuickAdds',
   ];
-  const optional = ['monthlyBudgets', 'quickExpenseTemplates', 'appSettings'];
+  const optional = [
+    'monthlyBudgets',
+    'quickExpenseTemplates',
+    'monthlyAdjustments',
+    'appSettings',
+  ];
 
   List<Map<String, dynamic>> rows(String key, {required bool mustExist}) {
     final value = decoded[key];
@@ -76,9 +81,15 @@ void validateBackupData(Object? decoded) {
     for (final r in rows('savingsGoals', mustExist: true)) r['id']
   };
 
-  void checkRefs(String table, String column, Set<Object?> valid) {
+  final templateIds = {
+    for (final r in rows('recurringTemplates', mustExist: true)) r['id']
+  };
+
+  void checkRefs(String table, String column, Set<Object?> valid,
+      {bool nullable = false}) {
     // Un gasto, presupuesto, etc. que apunta a algo que no está en el archivo.
     for (final r in rows(table, mustExist: false)) {
+      if (nullable && r[column] == null) continue;
       if (!valid.contains(r[column])) {
         throw const FormatException(kBackupCorruptMessage);
       }
@@ -91,4 +102,6 @@ void validateBackupData(Object? decoded) {
   checkRefs('quickExpenseTemplates', 'categoryId', categoryIds);
   checkRefs('savingsContributions', 'goalId', goalIds);
   checkRefs('savingsQuickAdds', 'goalId', goalIds);
+  checkRefs('transactions', 'recurringTemplateId', templateIds, nullable: true);
+  checkRefs('monthlyAdjustments', 'categoryId', categoryIds, nullable: true);
 }
