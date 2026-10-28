@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -58,17 +57,16 @@ class AjustesScreen extends StatelessWidget {
             subtitle: 'Guardar o restaurar tus datos en un archivo',
             screen: RespaldoScreen(),
           ),
-          // Herramienta del equipo para la prueba con boletas reales; no se
-          // incluye en builds de release.
-          if (!kReleaseMode) ...[
-            Divider(height: 1, indent: 72),
-            _SettingsTile(
-              icon: Icons.qr_code_scanner,
-              title: 'Prueba de boletas (equipo)',
-              subtitle: 'Mide si el timbre de las boletas se puede leer',
-              screen: PruebaBoletasScreen(),
-            ),
-          ],
+          // Herramienta del equipo para la prueba con boletas reales. Por
+          // ahora va en todas las builds (también release): la app aún no
+          // tiene usuarios externos. Volver a ocultarla antes de publicarla.
+          Divider(height: 1, indent: 72),
+          _SettingsTile(
+            icon: Icons.qr_code_scanner,
+            title: 'Prueba de boletas (equipo)',
+            subtitle: 'Mide si el timbre de las boletas se puede leer',
+            screen: PruebaBoletasScreen(),
+          ),
         ],
       ),
     );
