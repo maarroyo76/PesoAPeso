@@ -26,10 +26,10 @@ void main() {
 
     // Poblar más allá del seed por defecto: presupuesto editado, gasto,
     // recurrente, meta con aporte y acceso rápido.
-    await db.setBudgetForMonth('alimentacion', DateTime.now(), 999000);
+    await db.setBudgetForMonth('supermercado', DateTime.now(), 999000);
     final txId = await db.into(db.transactions).insert(
           TransactionsCompanion.insert(
-            categoryId: 'alimentacion',
+            categoryId: 'supermercado',
             amount: 5000,
             date: DateTime.now(),
             note: const Value('almuerzo'),
@@ -71,10 +71,10 @@ void main() {
     final quickAdds = await db2.select(db2.savingsQuickAdds).get();
     final lastOpen = await db2.getSetting('last_open_year_month');
 
-    expect(categories, hasLength(6),
-        reason: 'las 6 categorías seed originales');
+    expect(categories, hasLength(kDefaultCategories.length),
+        reason: 'el catálogo seed completo');
     expect(
-      budgets.firstWhere((b) => b.categoryId == 'alimentacion').amount,
+      budgets.firstWhere((b) => b.categoryId == 'supermercado').amount,
       999000,
     );
     expect(txs, hasLength(1));

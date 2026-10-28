@@ -28,11 +28,16 @@ String paymentMethodLabel(PaymentMethod method) => method.last4 == null
 /// tiene (o el método ya no existe): ahí no se muestra nada.
 String? transactionPaymentLabel(
         Transaction tx, Map<int, PaymentMethod> methodsById) =>
-    switch (tx.paymentMethodId) {
-      final id? when methodsById.containsKey(id) =>
-        paymentMethodLabel(methodsById[id]!),
-      _ => null,
-    };
+    tx.fundedByGoalId != null
+        ? kFundedBySavingsLabel
+        : switch (tx.paymentMethodId) {
+            final id? when methodsById.containsKey(id) =>
+              paymentMethodLabel(methodsById[id]!),
+            _ => null,
+          };
+
+/// RF52: etiqueta de un gasto pagado con el ahorro de una meta.
+const kFundedBySavingsLabel = 'Pagado con ahorro';
 
 /// Mapa id → método a partir de la lista del provider.
 Map<int, PaymentMethod> paymentMethodsById(List<PaymentMethod>? methods) =>

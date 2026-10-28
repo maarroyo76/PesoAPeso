@@ -35,8 +35,9 @@ void main() {
       throwsA(
           isA<FormatException>().having((e) => e.message, 'message', message)),
     );
-    // Los datos de siempre (las 6 categorías seed) siguen intactos.
-    expect(await db.select(db.categories).get(), hasLength(6));
+    // Los datos de siempre (el catálogo seed) siguen intactos.
+    expect(await db.select(db.categories).get(),
+        hasLength(kDefaultCategories.length));
   }
 
   test('archivo vacío', () async {
@@ -92,6 +93,7 @@ void main() {
   test('un respaldo válido se restaura', () async {
     final good = await db.exportAllData();
     expect(await repo.restoreFromBytes(_json(good)), isTrue);
-    expect(await db.select(db.categories).get(), hasLength(6));
+    expect(await db.select(db.categories).get(),
+        hasLength(kDefaultCategories.length));
   });
 }

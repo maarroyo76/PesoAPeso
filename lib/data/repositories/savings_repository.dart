@@ -15,8 +15,27 @@ class SavingsRepository {
 
   Future<void> deleteGoal(int id) => _db.deleteSavingsGoal(id);
 
-  Stream<Map<int, int>> watchTotalContributedByGoal() =>
-      _db.watchTotalContributedByGoal();
+  /// Saldo de cada meta: aportes menos lo usado en gastos (RF52).
+  Stream<Map<int, int>> watchGoalBalances() => _db.watchGoalBalances();
+
+  /// RF52: gastos pagados con el ahorro de la meta.
+  Stream<List<Transaction>> watchGoalSpending(int goalId) =>
+      _db.watchGoalSpending(goalId);
+
+  /// RF52: "Usar ahorro". Falla si [amount] supera el saldo de la meta.
+  Future<int> spendFromGoal({
+    required int goalId,
+    required String categoryId,
+    required int amount,
+    required DateTime date,
+    String note = '',
+  }) =>
+      _db.spendFromGoal(
+          goalId: goalId,
+          categoryId: categoryId,
+          amount: amount,
+          date: date,
+          note: note);
 
   Stream<List<SavingsContribution>> watchContributions(int goalId) =>
       _db.watchContributionsForGoal(goalId);

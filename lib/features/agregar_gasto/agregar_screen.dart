@@ -12,12 +12,71 @@ import '../../core/widgets/undo_snack_bar.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import 'expense_form.dart';
+import 'quick_suggestion.dart';
+import '../categorias/category_filters.dart';
+
+/// UX04: el botón central abre esta hoja para registrar un gasto (acceso
+/// rápido o ingreso manual) desde cualquier pantalla; al registrar se
+/// cierra y el usuario sigue donde estaba, con el aviso "Deshacer".
+Future<void> showRegisterSheet(BuildContext context) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: context.colors.paper,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (sheetContext) => FractionallySizedBox(
+      heightFactor: 0.94,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('Registrar gasto',
+                      style: Theme.of(sheetContext).textTheme.titleLarge),
+                ),
+                IconButton(
+                  tooltip: 'Cerrar',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(sheetContext),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              // El formulario sube con el teclado.
+              padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(sheetContext).bottom),
+              child: AgregarScreen(
+                active: true,
+                onRegistered: () {
+                  if (Navigator.canPop(sheetContext)) {
+                    Navigator.pop(sheetContext);
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 class AgregarScreen extends ConsumerWidget {
-  const AgregarScreen({super.key, this.active = false});
+  const AgregarScreen({super.key, this.active = false, this.onRegistered});
 
-  /// true mientras esta pestaña es la visible (UX03: foco en el monto).
+  /// true mientras la pantalla está visible (UX03: foco en el monto).
   final bool active;
+
+  /// UX04: se llama tras registrar un gasto, ya mostrado su aviso.
+  final VoidCallback? onRegistered;
 
   /// UX01: un toque registra el gasto de inmediato; el aviso posterior
   /// permite deshacerlo. Devuelve true para que el chip muestre "✓ Listo".
@@ -29,6 +88,10 @@ class AgregarScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, QuickExpenseTemplate qa) async {
     final date = DateTime.now();
     final txRepo = ref.read(transactionsRepositoryProvider);
+    // UX04: la hoja de registro se cierra después de registrar, pero el
+    // aviso con ×2/×3 sigue abierto: sus diálogos y alertas usan el
+    // contexto del navegador raíz, que sigue montado.
+    final host = Navigator.of(context, rootNavigator: true).context;
     final int id;
     final int? paymentMethodId;
     try {
@@ -74,7 +137,7 @@ class AgregarScreen extends ConsumerWidget {
       HapticFeedback.selectionClick();
       final alerts =
           await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
-      if (context.mounted) showBudgetAlertBanner(context, alerts);
+      if (host.mounted) showBudgetAlertBanner(host, alerts);
     }
 
     showUndoSnackBar(
@@ -94,7 +157,7 @@ class AgregarScreen extends ConsumerWidget {
               selected: n,
               onSelected: setQuantity,
               onMore: () async {
-                final more = await _askQuantity(context, qa);
+                final more = await _askQuantity(host, qa);
                 if (more != null) await setQuantity(more);
               },
             ),
@@ -106,7 +169,8 @@ class AgregarScreen extends ConsumerWidget {
     // o el presupuesto total en 80% o más.
     final alerts =
         await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
-    if (context.mounted) showBudgetAlertBanner(context, alerts);
+    if (host.mounted) showBudgetAlertBanner(host, alerts);
+    onRegistered?.call();
     return true;
   }
 
@@ -144,6 +208,14 @@ class AgregarScreen extends ConsumerWidget {
               height: 64, child: Center(child: CircularProgressIndicator())),
           error: (e, _) => LoadError(e, compact: true),
           data: (templates) {
+            // RF53: los accesos de una categoría archivada no se ofrecen.
+            final archived = {
+              for (final c in categoriesAsync.valueOrNull ?? const <Category>[])
+                if (c.archived) c.id
+            };
+            templates = templates
+                .where((t) => !archived.contains(t.categoryId))
+                .toList();
             if (templates.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -213,6 +285,7 @@ class AgregarScreen extends ConsumerWidget {
         const SizedBox(height: 12),
         ExpenseForm(
           focusAmount: active,
+          onRegistered: onRegistered,
           onSubmit: ({
             required categoryId,
             required amount,
@@ -277,7 +350,15 @@ class AgregarScreen extends ConsumerWidget {
             // categoría o el presupuesto total en 80% o más.
             final alerts = await checkBudgetAlerts(ref,
                 categoryId: categoryId, date: date);
-            if (context.mounted) showBudgetAlertBanner(context, alerts);
+            if (!context.mounted) return undo;
+            showBudgetAlertBanner(context, alerts);
+            // RF56: si este gasto se repite, ofrecer un acceso rápido. Va al
+            // final: su aviso debe quedar en cola detrás del de "Deshacer",
+            // que el formulario muestra apenas esto termina.
+            if (!recurring) {
+              await suggestQuickAccessIfRepeated(
+                  ref, ScaffoldMessenger.of(context), id);
+            }
             return undo;
           },
         ),
@@ -294,6 +375,7 @@ Future<void> _showQuickTemplateEditor(
   List<Category> categories, {
   QuickExpenseTemplate? template,
 }) async {
+  categories = selectableCategories(categories, keep: template?.categoryId);
   final labelController = TextEditingController(text: template?.label ?? '');
   final amountController = TextEditingController(
       text: template == null ? '' : formatAmountInput(template.amount));

@@ -5,6 +5,7 @@ import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
+import '../../core/utils/daily_allowance.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/utils/installments.dart';
 import '../../core/widgets/ledger_paper.dart';
@@ -65,7 +66,8 @@ class PresupuestosScreen extends ConsumerWidget {
     required DateTime month,
   }) {
     final spentByCategory = <String, int>{};
-    for (final t in transactions) {
+    // RF52: lo pagado con ahorro no consume el presupuesto.
+    for (final t in transactions.where(countsAgainstBudget)) {
       spentByCategory[t.categoryId] =
           (spentByCategory[t.categoryId] ?? 0) + t.amount;
     }
@@ -100,16 +102,23 @@ class PresupuestosScreen extends ConsumerWidget {
         const SizedBox(height: 24),
         const SectionLabel('Presupuesto por categoría'),
         const SizedBox(height: 12),
-        ...categories.map(
-          (c) => _BudgetRow(
-            category: c,
-            spent: spentByCategory[c.id] ?? 0,
-            budget: budgets[c.id] ?? 0,
-            adjustment: (budgets[c.id] ?? 0) - (baseBudgets[c.id] ?? 0),
-            onEdit: () =>
-                _showEditDialog(context, ref, c, baseBudgets[c.id] ?? 0, month),
-          ),
-        ),
+        // RF53: una archivada solo aparece en un mes donde tuvo gasto o
+        // presupuesto, para que ese mes siga cuadrando.
+        ...categories
+            .where((c) =>
+                !c.archived ||
+                (spentByCategory[c.id] ?? 0) > 0 ||
+                (budgets[c.id] ?? 0) > 0)
+            .map(
+              (c) => _BudgetRow(
+                category: c,
+                spent: spentByCategory[c.id] ?? 0,
+                budget: budgets[c.id] ?? 0,
+                adjustment: (budgets[c.id] ?? 0) - (baseBudgets[c.id] ?? 0),
+                onEdit: () => _showEditDialog(
+                    context, ref, c, baseBudgets[c.id] ?? 0, month),
+              ),
+            ),
       ],
     );
   }

@@ -213,7 +213,8 @@ void main() {
                     id: 'transporte',
                     name: 'Transporte',
                     colorValue: 0xFFB8842E,
-                    iconKey: 'directions_car'),
+                    iconKey: 'directions_car',
+                    archived: false),
               ])),
           quickExpenseTemplatesProvider
               .overrideWith((ref) => Stream.value(<QuickExpenseTemplate>[])),

@@ -12,6 +12,7 @@ import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
+import '../categorias/category_filters.dart';
 import 'metas_screen.dart' show showGoalEditor;
 
 final _dateFmt = DateFormat('d MMM, HH:mm', 'es_CL');
@@ -249,6 +250,19 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
                   ),
                 ],
               ),
+              // RF52 (corrige I3): pagar un gasto con lo ahorrado.
+              if (contributed > 0) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.shopping_bag_outlined, size: 18),
+                    label: const Text('Usar ahorro'),
+                    onPressed: () => _useSavings(contributed),
+                  ),
+                ),
+              ],
+              ..._goalSpending(),
               const SizedBox(height: 24),
               const SectionLabel('Historial'),
               const SizedBox(height: 8),
@@ -275,6 +289,137 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
     );
   }
 
+  /// RF52: gastos ya pagados con el ahorro de esta meta.
+  List<Widget> _goalSpending() {
+    final spending =
+        ref.watch(goalSpendingProvider(widget.goal.id)).valueOrNull ?? [];
+    if (spending.isEmpty) return const [];
+    final categories = {
+      for (final c in ref.watch(categoriesProvider).valueOrNull ?? <Category>[])
+        c.id: c.name
+    };
+    return [
+      const SizedBox(height: 24),
+      const SectionLabel('Usado del ahorro'),
+      const SizedBox(height: 8),
+      for (final t in spending)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: Text('−${currencyFmt.format(t.amount)}',
+              style: appAmountTextStyle.copyWith(
+                  fontSize: 14, fontWeight: FontWeight.w600)),
+          subtitle: Text(
+            [
+              categories[t.categoryId] ?? t.categoryId,
+              if (t.note.isNotEmpty) t.note,
+              _dateFmt.format(t.date),
+            ].join(' · '),
+            style: TextStyle(fontSize: 12, color: context.colors.inkSoft),
+          ),
+        ),
+    ];
+  }
+
+  /// RF52: registra un gasto pagado con el ahorro de la meta. Descuenta del
+  /// saldo de la meta y no del presupuesto del mes; no puede superar
+  /// [balance].
+  Future<void> _useSavings(int balance) async {
+    final categories = selectableCategories(
+        ref.read(categoriesProvider).valueOrNull ?? const <Category>[]);
+    if (categories.isEmpty) return;
+    final amountController = TextEditingController();
+    final noteController = TextEditingController(text: _goal.name);
+    var categoryId = categories.first.id;
+    String? amountError;
+
+    final amount = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: context.colors.paper,
+          title: Text('Usar ahorro de "${_goal.name}"',
+              style: TextStyle(fontSize: 16, color: context.colors.ink)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'El gasto se registra en su categoría, pero sale de esta '
+                  'meta y no del presupuesto del mes. Saldo: '
+                  '${currencyFmt.format(balance)}.',
+                  style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
+                ),
+                TextField(
+                  controller: amountController,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: amountInputFormatters,
+                  decoration: InputDecoration(
+                    labelText: 'Monto',
+                    prefixText: '\$ ',
+                    errorText: amountError,
+                  ),
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: categoryId,
+                  decoration: const InputDecoration(labelText: 'Categoría'),
+                  items: [
+                    for (final c in categories)
+                      DropdownMenuItem(value: c.id, child: Text(c.name)),
+                  ],
+                  onChanged: (v) => setDialogState(() => categoryId = v!),
+                ),
+                TextField(
+                  controller: noteController,
+                  maxLength: kMaxNameLength,
+                  decoration: const InputDecoration(labelText: 'Nota'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancelar',
+                  style: TextStyle(color: context.colors.inkSoft)),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(backgroundColor: context.colors.ink),
+              onPressed: () {
+                final value = parseAmountText(amountController.text) ?? 0;
+                if (value <= 0) {
+                  setDialogState(() => amountError = kInvalidAmountMessage);
+                } else if (value > balance) {
+                  setDialogState(() => amountError =
+                      'Solo hay ${currencyFmt.format(balance)} en esta meta');
+                } else {
+                  Navigator.pop(ctx, value);
+                }
+              },
+              child: const Text('Registrar gasto'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (amount == null || !mounted) return;
+    final txId = await ref.read(savingsRepositoryProvider).spendFromGoal(
+          goalId: _goal.id,
+          categoryId: categoryId,
+          amount: amount,
+          date: DateTime.now(),
+          note: noteController.text.trim(),
+        );
+    if (!mounted) return;
+    showUndoSnackBar(_messenger,
+        message: 'Gasto de ${currencyFmt.format(amount)} pagado con ahorro',
+        onUndo: () =>
+            ref.read(transactionsRepositoryProvider).deleteTransaction(txId));
+  }
+
   /// UX02: el aporte se borra al deslizar y el aviso permite deshacerlo.
   Future<void> _deleteContribution(SavingsContribution c) async {
     final undo = await ref
@@ -287,6 +432,10 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
   }
 
   Future<void> _confirmDeleteGoal() async {
+    // RF52: avisar que lo pagado con su ahorro vuelve al presupuesto del mes.
+    final usedSavings =
+        (ref.read(goalSpendingProvider(_goal.id)).valueOrNull ?? const [])
+            .isNotEmpty;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -294,7 +443,10 @@ class _GoalDetailSheetState extends ConsumerState<GoalDetailSheet> {
         title: Text('Eliminar meta',
             style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: Text(
-          '¿Eliminar "${_goal.name}"? Se borrará también su historial de aportes.',
+          '¿Eliminar "${_goal.name}"? Se borrará también su historial de '
+          'aportes.'
+          '${usedSavings ? ' Los gastos pagados con su ahorro se conservan, '
+              'pero pasan a contar en el presupuesto de su mes.' : ''}',
           style: TextStyle(color: context.colors.inkSoft),
         ),
         actions: [

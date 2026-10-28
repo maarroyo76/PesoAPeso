@@ -9,6 +9,7 @@ import '../../core/utils/formatting.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import '../metodos_pago/payment_method_labels.dart';
+import '../categorias/category_filters.dart';
 
 final _dayFmt = DateFormat('d MMM yyyy', 'es_CL');
 
@@ -267,6 +268,7 @@ class _PlanSheet extends ConsumerWidget {
 
   Future<void> _editPlan(BuildContext context, WidgetRef ref,
       InstallmentPlan plan, List<Category> categories) async {
+    categories = selectableCategories(categories, keep: plan.categoryId);
     final noteController = TextEditingController(text: plan.note);
     var categoryId = plan.categoryId;
     final saved = await showDialog<bool>(

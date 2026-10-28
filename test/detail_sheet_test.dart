@@ -17,7 +17,11 @@ void main() {
   testWidgets('el aviso de la hoja se muestra dentro de la hoja',
       (tester) async {
     const category = Category(
-        id: 'ocio', name: 'Ocio', colorValue: 0xFF6B3F5C, iconKey: 'theaters');
+        id: 'ocio',
+        name: 'Ocio',
+        colorValue: 0xFF6B3F5C,
+        iconKey: 'theaters',
+        archived: false);
     final month = DateTime(2026, 10);
     final tx = Transaction(
         id: 1,

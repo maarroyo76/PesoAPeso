@@ -46,13 +46,41 @@ class MetasScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
+                // La meta salió del onboarding: se sugiere aquí, en contexto.
                 if (goals.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'Todavía no tienes metas de ahorro. Toca "+" para crear una.',
-                      style: TextStyle(
-                          color: context.colors.inkSoft, fontSize: 13),
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.paperDeep,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.colors.rule),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Ahorra para algo concreto',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: context.colors.ink)),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Unas vacaciones, un fondo de emergencia o un '
+                          'computador nuevo. Lo que aportes sale del '
+                          'presupuesto del mes y lo puedes usar cuando '
+                          'llegue el momento.',
+                          style: TextStyle(
+                              color: context.colors.inkSoft, fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: context.colors.ink),
+                          onPressed: () => showGoalEditor(context, ref),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Crear una meta'),
+                        ),
+                      ],
                     ),
                   )
                 else

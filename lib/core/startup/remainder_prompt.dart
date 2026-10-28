@@ -40,8 +40,8 @@ Future<int> monthRemainder({
         await categories.watchAllMonthlyBudgets().first, month),
     adjustmentsForMonth(await categories.watchAllAdjustments().first, month),
   );
-  final spent = (await transactions.watchTransactionsForMonth(month).first)
-      .fold<int>(0, (a, t) => a + t.amount);
+  final spent =
+      budgetSpent(await transactions.watchTransactionsForMonth(month).first);
   return availableThisMonth(
     budget: budget,
     spent: spent,

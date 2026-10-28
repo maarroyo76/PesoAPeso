@@ -7,6 +7,7 @@ import '../../data/repositories/transactions_repository.dart';
 import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
 import 'budget_resolver.dart';
+import 'daily_allowance.dart';
 
 /// RF18/RF55: información para el aviso inmediato en pantalla cuando un
 /// gasto deja a una categoría, o al presupuesto total, en 80% o más.
@@ -70,8 +71,8 @@ Future<BudgetAlertInfo?> evaluateTotalBudgetAlert({
     adjustmentsForMonth(await categories.watchAllAdjustments().first, month),
   );
   if (budget <= 0) return null;
-  final spent = (await transactions.watchTransactionsForMonth(month).first)
-      .fold<int>(0, (a, t) => a + t.amount);
+  final spent =
+      budgetSpent(await transactions.watchTransactionsForMonth(month).first);
 
   final key = totalAlertSettingKey(month);
   final notified = int.tryParse(await settings.get(key) ?? '') ?? 0;
@@ -135,9 +136,7 @@ Future<BudgetAlertInfo?> checkBudgetAlert(
       .read(transactionsRepositoryProvider)
       .watchTransactionsForMonth(month)
       .first;
-  final spent = txs
-      .where((t) => t.categoryId == categoryId)
-      .fold<int>(0, (a, t) => a + t.amount);
+  final spent = budgetSpent(txs.where((t) => t.categoryId == categoryId));
   final ratio = spent / budget;
   if (ratio < 0.8) return null;
 

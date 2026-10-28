@@ -36,6 +36,20 @@ class CategoriesRepository {
 
   Future<void> deleteCategory(String id) => _db.deleteCategory(id);
 
+  /// RF53: archivar una categoría con historial; devuelve cómo deshacerlo.
+  Future<Future<void> Function()> archiveCategory(String id) =>
+      _db.archiveCategory(id);
+
+  Future<void> unarchiveCategory(String id) => _db.unarchiveCategory(id);
+
+  /// Onboarding: activa solo [activeIds] y archiva las demás.
+  Future<void> setActiveCategories(Set<String> activeIds) =>
+      _db.setActiveCategories(activeIds);
+
+  /// RF54: fusionar [fromId] en [intoId]; devuelve cuántos gastos se movieron.
+  Future<int> mergeCategory(String fromId, String intoId) =>
+      _db.mergeCategory(fromId, intoId);
+
   Stream<List<CategoryBudget>> watchAllBudgets() => _db.watchAllBudgets();
 
   Future<void> setBudgetForMonth(

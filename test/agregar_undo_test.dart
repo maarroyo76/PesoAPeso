@@ -3,6 +3,7 @@
 
 import 'dart:ffi' show DynamicLibrary;
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,18 +23,20 @@ void main() {
 
   const categories = [
     Category(
-        id: 'alimentacion',
+        id: 'supermercado',
         name: 'Alimentación',
         colorValue: 0xFF2F6F4E,
-        iconKey: 'restaurant'),
+        iconKey: 'restaurant',
+        archived: false),
     Category(
         id: 'transporte',
         name: 'Transporte',
         colorValue: 0xFFB8842E,
-        iconKey: 'directions_car'),
+        iconKey: 'directions_car',
+        archived: false),
   ];
   const quick = QuickExpenseTemplate(
-      id: 1, label: 'Café', amount: 2500, categoryId: 'alimentacion');
+      id: 1, label: 'Café', amount: 2500, categoryId: 'supermercado');
 
   // Las consultas a Drift corren con tiempo real, no con el reloj falso del
   // test: se les da un momento real antes de cada pump.
@@ -203,6 +206,57 @@ void main() {
     expect(last.categoryId, 'transporte');
     // Deja vencer el aviso y la animación de "¡Registrado!".
     await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('RF56: el tercer gasto igual sugiere un acceso rápido',
+      (tester) async {
+    tallView(tester);
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime.now();
+    await tester.runAsync(() async {
+      for (final daysAgo in [20, 10]) {
+        await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            categoryId: 'transporte',
+            amount: 4200,
+            note: const Value('Almuerzo'),
+            date: now.subtract(Duration(days: daysAgo))));
+      }
+    });
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        categoriesProvider.overrideWith((ref) => Stream.value(categories)),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
+        quickExpenseTemplatesProvider
+            .overrideWith((ref) => Stream.value([quick])),
+      ],
+      child: const MaterialApp(home: Scaffold(body: AgregarScreen())),
+    ));
+    await settle(tester);
+
+    // La base nueva ya trae "Colación" por $3.500 como acceso rápido.
+    await tester.enterText(find.byType(TextField).first, '4200');
+    await tester.enterText(find.byType(TextField).last, 'Almuerzo');
+    await tester.tap(find.text('Registrar gasto'));
+    await settle(tester);
+    expect(find.textContaining('Registrado · '), findsOneWidget,
+        reason: 'primero el aviso con "Deshacer"');
+
+    // Al vencer el aviso de "Deshacer" aparece la sugerencia.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining('¿Lo guardas como acceso rápido?'), findsOneWidget);
+    await tester.tap(find.text('Guardar'));
+    await settle(tester);
+    final templates = (await tester
+        .runAsync(() => db.select(db.quickExpenseTemplates).get()))!;
+    expect(templates.where((t) => t.label == 'Almuerzo' && t.amount == 4200),
+        hasLength(1));
+    await tester.pump(const Duration(seconds: 10));
   });
 
   testWidgets('al entrar a la pestaña el monto toma el foco (UX03)',

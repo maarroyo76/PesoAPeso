@@ -6,10 +6,21 @@ class TransactionsRepository {
   TransactionsRepository(this._db);
   final AppDatabase _db;
 
+  Future<List<Transaction>> transactionsSince(DateTime from) =>
+      _db.transactionsSince(from);
+
+  Future<Transaction?> transactionById(int id) => _db.transactionById(id);
+
+  /// UX06: todos los gastos, del más reciente.
+  Stream<List<Transaction>> watchAll() => _db.watchAllTransactions();
+
   Stream<List<Transaction>> watchTransactionsForMonth(DateTime month) =>
       _db.watchTransactionsForMonth(month);
 
   Future<void> deleteTransaction(int id) => _db.deleteTransaction(id);
+
+  /// RF37: "valió la pena" (true), "no tanto" (false) o sin revisar (null).
+  Future<void> setWorthIt(int id, bool? worthIt) => _db.setWorthIt(id, worthIt);
 
   /// UX02: borra y devuelve cómo deshacerlo.
   Future<Future<void> Function()> deleteTransactionUndoable(int id) =>

@@ -23,7 +23,11 @@ void main() {
   testWidgets('abre el selector de fecha con un gasto de hace 5 años',
       (tester) async {
     const category = Category(
-        id: 'ocio', name: 'Ocio', colorValue: 0xFF6B3F5C, iconKey: 'theaters');
+        id: 'ocio',
+        name: 'Ocio',
+        colorValue: 0xFF6B3F5C,
+        iconKey: 'theaters',
+        archived: false);
     final old = DateTime.now().subtract(const Duration(days: 365 * 5));
 
     await tester.pumpWidget(ProviderScope(
@@ -66,7 +70,11 @@ void main() {
 
   Widget form({required bool editing, required void Function() onSubmit}) {
     const category = Category(
-        id: 'ocio', name: 'Ocio', colorValue: 0xFF6B3F5C, iconKey: 'theaters');
+        id: 'ocio',
+        name: 'Ocio',
+        colorValue: 0xFF6B3F5C,
+        iconKey: 'theaters',
+        archived: false);
     // Un gasto nuevo consulta la última categoría usada (UX03).
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);

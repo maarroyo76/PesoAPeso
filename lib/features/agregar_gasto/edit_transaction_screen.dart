@@ -9,6 +9,8 @@ import '../../data/local/app_database.dart';
 import '../cuotas/cuotas_screen.dart' show showInstallmentPlanSheet;
 import '../recurrentes/recurrentes_screen.dart' show showRecurringEditor;
 import 'expense_form.dart';
+import '../../core/utils/weekly_review.dart';
+import '../revision/weekly_review_screen.dart' show WorthItChoice;
 
 /// RF08: editar (o eliminar) un movimiento ya registrado. Reutiliza
 /// ExpenseForm precargado con los valores actuales de [transaction].
@@ -50,6 +52,15 @@ class EditTransactionScreen extends ConsumerWidget {
                     templateId: transaction.recurringTemplateId!),
               if (transaction.installmentPlanId != null)
                 _InstallmentOriginCard(transaction: transaction),
+              // RF37: la marca de la revisión se puede cambiar después.
+              if (isReviewable(transaction)) ...[
+                Text('¿Valió la pena?',
+                    style:
+                        TextStyle(fontSize: 12, color: context.colors.inkSoft)),
+                const SizedBox(height: 4),
+                WorthItChoice(transaction: transaction),
+                const SizedBox(height: 16),
+              ],
               ExpenseForm(
                 isEditing: true,
                 initialAmount: transaction.amount,

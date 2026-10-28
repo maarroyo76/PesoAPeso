@@ -6,9 +6,12 @@ import '../../core/utils/amount_input.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/widgets/load_error.dart';
+import '../../core/widgets/section_label.dart';
+import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
 
-/// RF03: crear, editar y eliminar categorías.
+/// RF03: crear, editar y eliminar categorías. RF53/RF54: archivar y
+/// fusionar las que tienen historial.
 ///
 /// Se eligen a mano (no una rueda de color libre) para que toda categoría
 /// quede en un tono "tinta de cuaderno" — mismo nivel de saturación/brillo
@@ -80,60 +83,199 @@ class CategoriasScreen extends ConsumerWidget {
       body: categoriesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => LoadError(e),
-        data: (categories) => categories.isEmpty
-            ? Center(
+        data: (categories) {
+          if (categories.isEmpty) {
+            return Center(
                 child: Text('No hay categorías todavía.',
-                    style: TextStyle(color: context.colors.inkSoft)))
-            : ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: categories.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, indent: 20),
-                itemBuilder: (context, i) {
-                  final c = categories[i];
-                  final color = context.colors.category(c.colorValue);
-                  return ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                    leading: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 3,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 10),
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: color.withAlpha(30),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child:
-                              Icon(iconForCategory(c), color: color, size: 18),
-                        ),
-                      ],
-                    ),
-                    title: Text(c.name,
-                        style: const TextStyle(fontWeight: FontWeight.w500)),
-                    onTap: () => showCategoryEditor(context, ref, category: c),
-                    trailing: IconButton(
-                      tooltip: 'Eliminar ${c.name}',
-                      icon: Icon(Icons.delete_outline,
-                          color: context.colors.inkSoft),
-                      onPressed: () => confirmDeleteCategory(context, ref, c),
-                    ),
-                  );
-                },
-              ),
+                    style: TextStyle(color: context.colors.inkSoft)));
+          }
+          final active = categories.where((c) => !c.archived).toList();
+          final archived = categories.where((c) => c.archived).toList();
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              for (final c in active) ...[
+                _CategoryTile(category: c, all: categories),
+                const Divider(height: 1, indent: 20),
+              ],
+              // RF53: siguen en el historial y en Estadísticas.
+              if (archived.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 24, 20, 4),
+                  child: SectionLabel('Archivadas'),
+                ),
+                for (final c in archived) ...[
+                  _CategoryTile(category: c, all: categories),
+                  const Divider(height: 1, indent: 20),
+                ],
+              ],
+            ],
+          );
+        },
       ),
     );
   }
+}
+
+enum _CategoryAction { archive, unarchive, merge, delete }
+
+class _CategoryTile extends ConsumerWidget {
+  const _CategoryTile({required this.category, required this.all});
+  final Category category;
+  final List<Category> all;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = category;
+    final color = context.colors.category(c.colorValue);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 3,
+            height: 36,
+            margin: const EdgeInsets.only(right: 10),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withAlpha(30),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(iconForCategory(c), color: color, size: 18),
+          ),
+        ],
+      ),
+      title: Text(c.name,
+          style: TextStyle(
+              fontWeight: FontWeight.w500,
+              color: c.archived ? context.colors.inkSoft : null)),
+      onTap: () => showCategoryEditor(context, ref, category: c),
+      trailing: PopupMenuButton<_CategoryAction>(
+        tooltip: 'Opciones de ${c.name}',
+        icon: Icon(Icons.more_vert, color: context.colors.inkSoft),
+        onSelected: (action) => switch (action) {
+          _CategoryAction.archive => archiveCategory(context, ref, c, all),
+          _CategoryAction.unarchive =>
+            ref.read(categoriesRepositoryProvider).unarchiveCategory(c.id),
+          _CategoryAction.merge => mergeCategory(context, ref, c, all),
+          _CategoryAction.delete => confirmDeleteCategory(context, ref, c),
+        },
+        itemBuilder: (_) => [
+          if (c.archived)
+            const PopupMenuItem(
+                value: _CategoryAction.unarchive, child: Text('Restaurar'))
+          else
+            const PopupMenuItem(
+                value: _CategoryAction.archive, child: Text('Archivar')),
+          const PopupMenuItem(
+              value: _CategoryAction.merge, child: Text('Fusionar en otra…')),
+          const PopupMenuItem(
+              value: _CategoryAction.delete, child: Text('Eliminar')),
+        ],
+      ),
+    );
+  }
+}
+
+/// RF53: archiva [category], con "Deshacer". Debe quedar al menos una
+/// categoría activa para poder registrar gastos.
+Future<void> archiveCategory(BuildContext context, WidgetRef ref,
+    Category category, List<Category> all) async {
+  final messenger = ScaffoldMessenger.of(context);
+  if (!all.any((c) => !c.archived && c.id != category.id)) {
+    messenger.showSnackBar(const SnackBar(
+        content: Text('Debe quedar al menos una categoría activa.')));
+    return;
+  }
+  final undo =
+      await ref.read(categoriesRepositoryProvider).archiveCategory(category.id);
+  showUndoSnackBar(messenger,
+      message: '"${category.name}" archivada', onUndo: undo);
+}
+
+/// RF54: elige la categoría destino, confirma y fusiona [category] en ella.
+Future<void> mergeCategory(BuildContext context, WidgetRef ref,
+    Category category, List<Category> all) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final targets = all.where((c) => !c.archived && c.id != category.id).toList();
+  if (targets.isEmpty) {
+    messenger.showSnackBar(const SnackBar(
+        content: Text('No hay otra categoría activa para fusionar.')));
+    return;
+  }
+  String? targetId;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        backgroundColor: context.colors.paper,
+        title: Text('Fusionar "${category.name}" en…',
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RadioGroup<String>(
+                  groupValue: targetId,
+                  onChanged: (v) => setDialogState(() => targetId = v),
+                  child: Column(
+                    children: [
+                      for (final t in targets)
+                        RadioListTile<String>(
+                          value: t.id,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(t.name),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sus gastos, recurrentes, compras en cuotas y accesos '
+                  'rápidos pasan a la categoría elegida, que también suma su '
+                  'presupuesto. "${category.name}" se elimina y esto no se '
+                  'puede deshacer.',
+                  style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.colors.rust),
+            onPressed: targetId == null ? null : () => Navigator.pop(ctx, true),
+            child: const Text('Fusionar'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (confirmed != true || targetId == null) return;
+  final target = targets.firstWhere((t) => t.id == targetId);
+  final moved = await ref
+      .read(categoriesRepositoryProvider)
+      .mergeCategory(category.id, target.id);
+  messenger.showSnackBar(SnackBar(
+      content: Text(moved == 1
+          ? 'Se movió 1 gasto a "${target.name}".'
+          : 'Se movieron $moved gastos a "${target.name}".')));
 }
 
 /// RF03/RF23: crear o editar una categoría (nombre + color). Se usa desde
@@ -336,25 +478,47 @@ Future<void> confirmDeleteCategory(
   if (!context.mounted) return;
 
   if (!canDelete) {
-    await showDialog<void>(
+    final all = ref.read(categoriesProvider).valueOrNull ?? [category];
+    // RF53/RF54 (corrige I5): con historial no se elimina, pero se puede
+    // archivar o fusionar en otra.
+    final action = await showDialog<_CategoryAction>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: context.colors.paper,
         title: Text('No se puede eliminar',
             style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: Text(
-          '"${category.name}" tiene gastos, recurrentes o accesos rápidos asociados. '
-          'Elimina o reasigna esos elementos primero.',
+          '"${category.name}" tiene gastos, recurrentes o accesos rápidos '
+          'asociados. Puedes archivarla, para que deje de aparecer sin perder '
+          'su historial, o fusionarla en otra categoría.',
           style: TextStyle(color: context.colors.inkSoft),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Entendido'),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _CategoryAction.merge),
+            child: const Text('Fusionar…'),
+          ),
+          if (!category.archived)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, _CategoryAction.archive),
+              child: const Text('Archivar'),
+            ),
         ],
       ),
     );
+    if (!context.mounted) return;
+    switch (action) {
+      case _CategoryAction.archive:
+        await archiveCategory(context, ref, category, all);
+      case _CategoryAction.merge:
+        await mergeCategory(context, ref, category, all);
+      default:
+    }
     return;
   }
 
