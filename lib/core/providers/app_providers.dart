@@ -19,12 +19,10 @@ final currentMonthProvider = StateProvider<DateTime>((ref) {
   return DateTime(now.year, now.month);
 });
 
-/// Pestaña visible del RootShell. Es un provider para que otras pantallas
-/// puedan llevar al usuario a otra pestaña (UX10: Resumen vacío → Agregar).
+/// Pestaña visible del RootShell (Resumen, Presupuestos, Metas,
+/// Estadísticas). Es un provider para que otras pantallas puedan llevar al
+/// usuario a otra pestaña.
 final selectedTabProvider = StateProvider<int>((ref) => 0);
-
-/// Índice de la pestaña Agregar en el RootShell.
-const kAgregarTabIndex = 1;
 
 /// Una sola instancia de la base de datos para toda la app.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -50,6 +48,15 @@ final recurringTemplatesRepositoryProvider =
 final recurringTemplatesProvider = StreamProvider(
     (ref) => ref.watch(recurringTemplatesRepositoryProvider).watchTemplates());
 
+/// RF49: decisiones recientes sobre los gastos habituales. Depende del mes en
+/// curso para recalcular la ventana cuando la app vuelve de segundo plano.
+final habitualOccurrencesProvider = StreamProvider((ref) {
+  ref.watch(currentMonthProvider);
+  return ref
+      .watch(recurringTemplatesRepositoryProvider)
+      .watchRecentOccurrences(DateTime.now());
+});
+
 final quickExpenseTemplatesRepositoryProvider =
     Provider<QuickExpenseTemplatesRepository>(
   (ref) => QuickExpenseTemplatesRepository(ref.watch(appDatabaseProvider)),
@@ -66,8 +73,13 @@ final savingsRepositoryProvider = Provider<SavingsRepository>(
 final savingsGoalsProvider =
     StreamProvider((ref) => ref.watch(savingsRepositoryProvider).watchGoals());
 
-final savingsTotalsProvider = StreamProvider<Map<int, int>>((ref) =>
-    ref.watch(savingsRepositoryProvider).watchTotalContributedByGoal());
+/// Saldo de cada meta: aportes menos lo usado en gastos (RF52).
+final savingsTotalsProvider = StreamProvider<Map<int, int>>(
+    (ref) => ref.watch(savingsRepositoryProvider).watchGoalBalances());
+
+/// RF52: gastos pagados con el ahorro de una meta.
+final goalSpendingProvider = StreamProvider.family((ref, int goalId) =>
+    ref.watch(savingsRepositoryProvider).watchGoalSpending(goalId));
 
 /// RF51: total aportado a metas en [month]; sale del presupuesto del mes.
 final monthContributedProvider = StreamProvider.family((ref, DateTime month) =>
@@ -103,6 +115,10 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(appDatabaseProvider)),
 );
 
+/// Un valor de AppSettings, reactivo (null si no está guardado).
+final settingProvider = StreamProvider.family<String?, String>(
+    (ref, key) => ref.watch(settingsRepositoryProvider).watch(key));
+
 final backupRepositoryProvider = Provider<BackupRepository>(
   (ref) => BackupRepository(ref.watch(appDatabaseProvider)),
 );
@@ -111,6 +127,10 @@ final backupRepositoryProvider = Provider<BackupRepository>(
 /// TransactionsRepository hace que estos providers se recalculen solos.
 final categoriesProvider = StreamProvider(
     (ref) => ref.watch(categoriesRepositoryProvider).watchCategories());
+
+/// UX06: todos los gastos, para el historial.
+final allTransactionsProvider = StreamProvider(
+    (ref) => ref.watch(transactionsRepositoryProvider).watchAll());
 
 final monthTransactionsProvider = StreamProvider.family((ref, DateTime month) =>
     ref.watch(transactionsRepositoryProvider).watchTransactionsForMonth(month));

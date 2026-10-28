@@ -33,8 +33,19 @@ class $CategoriesTable extends Categories
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant('category'));
+  static const VerificationMeta _archivedMeta =
+      const VerificationMeta('archived');
   @override
-  List<GeneratedColumn> get $columns => [id, name, colorValue, iconKey];
+  late final GeneratedColumn<bool> archived = GeneratedColumn<bool>(
+      'archived', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("archived" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, name, colorValue, iconKey, archived];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -68,6 +79,10 @@ class $CategoriesTable extends Categories
       context.handle(_iconKeyMeta,
           iconKey.isAcceptableOrUnknown(data['icon_key']!, _iconKeyMeta));
     }
+    if (data.containsKey('archived')) {
+      context.handle(_archivedMeta,
+          archived.isAcceptableOrUnknown(data['archived']!, _archivedMeta));
+    }
     return context;
   }
 
@@ -85,6 +100,8 @@ class $CategoriesTable extends Categories
           .read(DriftSqlType.int, data['${effectivePrefix}color_value'])!,
       iconKey: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}icon_key'])!,
+      archived: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}archived'])!,
     );
   }
 
@@ -99,11 +116,16 @@ class Category extends DataClass implements Insertable<Category> {
   final String name;
   final int colorValue;
   final String iconKey;
+
+  /// RF53: archivada. No se ofrece al registrar ni en Presupuestos, pero
+  /// sigue en el historial y en Estadísticas, y se puede restaurar.
+  final bool archived;
   const Category(
       {required this.id,
       required this.name,
       required this.colorValue,
-      required this.iconKey});
+      required this.iconKey,
+      required this.archived});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -111,6 +133,7 @@ class Category extends DataClass implements Insertable<Category> {
     map['name'] = Variable<String>(name);
     map['color_value'] = Variable<int>(colorValue);
     map['icon_key'] = Variable<String>(iconKey);
+    map['archived'] = Variable<bool>(archived);
     return map;
   }
 
@@ -120,6 +143,7 @@ class Category extends DataClass implements Insertable<Category> {
       name: Value(name),
       colorValue: Value(colorValue),
       iconKey: Value(iconKey),
+      archived: Value(archived),
     );
   }
 
@@ -131,6 +155,7 @@ class Category extends DataClass implements Insertable<Category> {
       name: serializer.fromJson<String>(json['name']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
       iconKey: serializer.fromJson<String>(json['iconKey']),
+      archived: serializer.fromJson<bool>(json['archived']),
     );
   }
   @override
@@ -141,16 +166,22 @@ class Category extends DataClass implements Insertable<Category> {
       'name': serializer.toJson<String>(name),
       'colorValue': serializer.toJson<int>(colorValue),
       'iconKey': serializer.toJson<String>(iconKey),
+      'archived': serializer.toJson<bool>(archived),
     };
   }
 
   Category copyWith(
-          {String? id, String? name, int? colorValue, String? iconKey}) =>
+          {String? id,
+          String? name,
+          int? colorValue,
+          String? iconKey,
+          bool? archived}) =>
       Category(
         id: id ?? this.id,
         name: name ?? this.name,
         colorValue: colorValue ?? this.colorValue,
         iconKey: iconKey ?? this.iconKey,
+        archived: archived ?? this.archived,
       );
   Category copyWithCompanion(CategoriesCompanion data) {
     return Category(
@@ -159,6 +190,7 @@ class Category extends DataClass implements Insertable<Category> {
       colorValue:
           data.colorValue.present ? data.colorValue.value : this.colorValue,
       iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
+      archived: data.archived.present ? data.archived.value : this.archived,
     );
   }
 
@@ -168,13 +200,14 @@ class Category extends DataClass implements Insertable<Category> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
-          ..write('iconKey: $iconKey')
+          ..write('iconKey: $iconKey, ')
+          ..write('archived: $archived')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, colorValue, iconKey);
+  int get hashCode => Object.hash(id, name, colorValue, iconKey, archived);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -182,7 +215,8 @@ class Category extends DataClass implements Insertable<Category> {
           other.id == this.id &&
           other.name == this.name &&
           other.colorValue == this.colorValue &&
-          other.iconKey == this.iconKey);
+          other.iconKey == this.iconKey &&
+          other.archived == this.archived);
 }
 
 class CategoriesCompanion extends UpdateCompanion<Category> {
@@ -190,12 +224,14 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
   final Value<String> name;
   final Value<int> colorValue;
   final Value<String> iconKey;
+  final Value<bool> archived;
   final Value<int> rowid;
   const CategoriesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.iconKey = const Value.absent(),
+    this.archived = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CategoriesCompanion.insert({
@@ -203,6 +239,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     required String name,
     required int colorValue,
     this.iconKey = const Value.absent(),
+    this.archived = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name),
@@ -212,6 +249,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     Expression<String>? name,
     Expression<int>? colorValue,
     Expression<String>? iconKey,
+    Expression<bool>? archived,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -219,6 +257,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       if (name != null) 'name': name,
       if (colorValue != null) 'color_value': colorValue,
       if (iconKey != null) 'icon_key': iconKey,
+      if (archived != null) 'archived': archived,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -228,12 +267,14 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       Value<String>? name,
       Value<int>? colorValue,
       Value<String>? iconKey,
+      Value<bool>? archived,
       Value<int>? rowid}) {
     return CategoriesCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
       iconKey: iconKey ?? this.iconKey,
+      archived: archived ?? this.archived,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -253,6 +294,9 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     if (iconKey.present) {
       map['icon_key'] = Variable<String>(iconKey.value);
     }
+    if (archived.present) {
+      map['archived'] = Variable<bool>(archived.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -266,6 +310,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
           ..write('iconKey: $iconKey, ')
+          ..write('archived: $archived, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -537,401 +582,6 @@ class CategoryBudgetsCompanion extends UpdateCompanion<CategoryBudget> {
           ..write('month: $month, ')
           ..write('amount: $amount, ')
           ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $RecurringTemplatesTable extends RecurringTemplates
-    with TableInfo<$RecurringTemplatesTable, RecurringTemplate> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $RecurringTemplatesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _categoryIdMeta =
-      const VerificationMeta('categoryId');
-  @override
-  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
-      'category_id', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
-  @override
-  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
-      'amount', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _noteMeta = const VerificationMeta('note');
-  @override
-  late final GeneratedColumn<String> note = GeneratedColumn<String>(
-      'note', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _dayOfMonthMeta =
-      const VerificationMeta('dayOfMonth');
-  @override
-  late final GeneratedColumn<int> dayOfMonth = GeneratedColumn<int>(
-      'day_of_month', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _activeMeta = const VerificationMeta('active');
-  @override
-  late final GeneratedColumn<bool> active = GeneratedColumn<bool>(
-      'active', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("active" IN (0, 1))'),
-      defaultValue: const Constant(true));
-  static const VerificationMeta _lastGeneratedYearMonthMeta =
-      const VerificationMeta('lastGeneratedYearMonth');
-  @override
-  late final GeneratedColumn<int> lastGeneratedYearMonth = GeneratedColumn<int>(
-      'last_generated_year_month', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  @override
-  List<GeneratedColumn> get $columns => [
-        id,
-        categoryId,
-        amount,
-        note,
-        dayOfMonth,
-        active,
-        lastGeneratedYearMonth
-      ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'recurring_templates';
-  @override
-  VerificationContext validateIntegrity(Insertable<RecurringTemplate> instance,
-      {bool isInserting = false}) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('category_id')) {
-      context.handle(
-          _categoryIdMeta,
-          categoryId.isAcceptableOrUnknown(
-              data['category_id']!, _categoryIdMeta));
-    } else if (isInserting) {
-      context.missing(_categoryIdMeta);
-    }
-    if (data.containsKey('amount')) {
-      context.handle(_amountMeta,
-          amount.isAcceptableOrUnknown(data['amount']!, _amountMeta));
-    } else if (isInserting) {
-      context.missing(_amountMeta);
-    }
-    if (data.containsKey('note')) {
-      context.handle(
-          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
-    }
-    if (data.containsKey('day_of_month')) {
-      context.handle(
-          _dayOfMonthMeta,
-          dayOfMonth.isAcceptableOrUnknown(
-              data['day_of_month']!, _dayOfMonthMeta));
-    } else if (isInserting) {
-      context.missing(_dayOfMonthMeta);
-    }
-    if (data.containsKey('active')) {
-      context.handle(_activeMeta,
-          active.isAcceptableOrUnknown(data['active']!, _activeMeta));
-    }
-    if (data.containsKey('last_generated_year_month')) {
-      context.handle(
-          _lastGeneratedYearMonthMeta,
-          lastGeneratedYearMonth.isAcceptableOrUnknown(
-              data['last_generated_year_month']!, _lastGeneratedYearMonthMeta));
-    } else if (isInserting) {
-      context.missing(_lastGeneratedYearMonthMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  RecurringTemplate map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return RecurringTemplate(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      categoryId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}category_id'])!,
-      amount: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
-      note: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}note'])!,
-      dayOfMonth: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}day_of_month'])!,
-      active: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}active'])!,
-      lastGeneratedYearMonth: attachedDatabase.typeMapping.read(
-          DriftSqlType.int,
-          data['${effectivePrefix}last_generated_year_month'])!,
-    );
-  }
-
-  @override
-  $RecurringTemplatesTable createAlias(String alias) {
-    return $RecurringTemplatesTable(attachedDatabase, alias);
-  }
-}
-
-class RecurringTemplate extends DataClass
-    implements Insertable<RecurringTemplate> {
-  final int id;
-  final String categoryId;
-  final int amount;
-  final String note;
-  final int dayOfMonth;
-  final bool active;
-  final int lastGeneratedYearMonth;
-  const RecurringTemplate(
-      {required this.id,
-      required this.categoryId,
-      required this.amount,
-      required this.note,
-      required this.dayOfMonth,
-      required this.active,
-      required this.lastGeneratedYearMonth});
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['category_id'] = Variable<String>(categoryId);
-    map['amount'] = Variable<int>(amount);
-    map['note'] = Variable<String>(note);
-    map['day_of_month'] = Variable<int>(dayOfMonth);
-    map['active'] = Variable<bool>(active);
-    map['last_generated_year_month'] = Variable<int>(lastGeneratedYearMonth);
-    return map;
-  }
-
-  RecurringTemplatesCompanion toCompanion(bool nullToAbsent) {
-    return RecurringTemplatesCompanion(
-      id: Value(id),
-      categoryId: Value(categoryId),
-      amount: Value(amount),
-      note: Value(note),
-      dayOfMonth: Value(dayOfMonth),
-      active: Value(active),
-      lastGeneratedYearMonth: Value(lastGeneratedYearMonth),
-    );
-  }
-
-  factory RecurringTemplate.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return RecurringTemplate(
-      id: serializer.fromJson<int>(json['id']),
-      categoryId: serializer.fromJson<String>(json['categoryId']),
-      amount: serializer.fromJson<int>(json['amount']),
-      note: serializer.fromJson<String>(json['note']),
-      dayOfMonth: serializer.fromJson<int>(json['dayOfMonth']),
-      active: serializer.fromJson<bool>(json['active']),
-      lastGeneratedYearMonth:
-          serializer.fromJson<int>(json['lastGeneratedYearMonth']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'categoryId': serializer.toJson<String>(categoryId),
-      'amount': serializer.toJson<int>(amount),
-      'note': serializer.toJson<String>(note),
-      'dayOfMonth': serializer.toJson<int>(dayOfMonth),
-      'active': serializer.toJson<bool>(active),
-      'lastGeneratedYearMonth': serializer.toJson<int>(lastGeneratedYearMonth),
-    };
-  }
-
-  RecurringTemplate copyWith(
-          {int? id,
-          String? categoryId,
-          int? amount,
-          String? note,
-          int? dayOfMonth,
-          bool? active,
-          int? lastGeneratedYearMonth}) =>
-      RecurringTemplate(
-        id: id ?? this.id,
-        categoryId: categoryId ?? this.categoryId,
-        amount: amount ?? this.amount,
-        note: note ?? this.note,
-        dayOfMonth: dayOfMonth ?? this.dayOfMonth,
-        active: active ?? this.active,
-        lastGeneratedYearMonth:
-            lastGeneratedYearMonth ?? this.lastGeneratedYearMonth,
-      );
-  RecurringTemplate copyWithCompanion(RecurringTemplatesCompanion data) {
-    return RecurringTemplate(
-      id: data.id.present ? data.id.value : this.id,
-      categoryId:
-          data.categoryId.present ? data.categoryId.value : this.categoryId,
-      amount: data.amount.present ? data.amount.value : this.amount,
-      note: data.note.present ? data.note.value : this.note,
-      dayOfMonth:
-          data.dayOfMonth.present ? data.dayOfMonth.value : this.dayOfMonth,
-      active: data.active.present ? data.active.value : this.active,
-      lastGeneratedYearMonth: data.lastGeneratedYearMonth.present
-          ? data.lastGeneratedYearMonth.value
-          : this.lastGeneratedYearMonth,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('RecurringTemplate(')
-          ..write('id: $id, ')
-          ..write('categoryId: $categoryId, ')
-          ..write('amount: $amount, ')
-          ..write('note: $note, ')
-          ..write('dayOfMonth: $dayOfMonth, ')
-          ..write('active: $active, ')
-          ..write('lastGeneratedYearMonth: $lastGeneratedYearMonth')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-      id, categoryId, amount, note, dayOfMonth, active, lastGeneratedYearMonth);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is RecurringTemplate &&
-          other.id == this.id &&
-          other.categoryId == this.categoryId &&
-          other.amount == this.amount &&
-          other.note == this.note &&
-          other.dayOfMonth == this.dayOfMonth &&
-          other.active == this.active &&
-          other.lastGeneratedYearMonth == this.lastGeneratedYearMonth);
-}
-
-class RecurringTemplatesCompanion extends UpdateCompanion<RecurringTemplate> {
-  final Value<int> id;
-  final Value<String> categoryId;
-  final Value<int> amount;
-  final Value<String> note;
-  final Value<int> dayOfMonth;
-  final Value<bool> active;
-  final Value<int> lastGeneratedYearMonth;
-  const RecurringTemplatesCompanion({
-    this.id = const Value.absent(),
-    this.categoryId = const Value.absent(),
-    this.amount = const Value.absent(),
-    this.note = const Value.absent(),
-    this.dayOfMonth = const Value.absent(),
-    this.active = const Value.absent(),
-    this.lastGeneratedYearMonth = const Value.absent(),
-  });
-  RecurringTemplatesCompanion.insert({
-    this.id = const Value.absent(),
-    required String categoryId,
-    required int amount,
-    this.note = const Value.absent(),
-    required int dayOfMonth,
-    this.active = const Value.absent(),
-    required int lastGeneratedYearMonth,
-  })  : categoryId = Value(categoryId),
-        amount = Value(amount),
-        dayOfMonth = Value(dayOfMonth),
-        lastGeneratedYearMonth = Value(lastGeneratedYearMonth);
-  static Insertable<RecurringTemplate> custom({
-    Expression<int>? id,
-    Expression<String>? categoryId,
-    Expression<int>? amount,
-    Expression<String>? note,
-    Expression<int>? dayOfMonth,
-    Expression<bool>? active,
-    Expression<int>? lastGeneratedYearMonth,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (categoryId != null) 'category_id': categoryId,
-      if (amount != null) 'amount': amount,
-      if (note != null) 'note': note,
-      if (dayOfMonth != null) 'day_of_month': dayOfMonth,
-      if (active != null) 'active': active,
-      if (lastGeneratedYearMonth != null)
-        'last_generated_year_month': lastGeneratedYearMonth,
-    });
-  }
-
-  RecurringTemplatesCompanion copyWith(
-      {Value<int>? id,
-      Value<String>? categoryId,
-      Value<int>? amount,
-      Value<String>? note,
-      Value<int>? dayOfMonth,
-      Value<bool>? active,
-      Value<int>? lastGeneratedYearMonth}) {
-    return RecurringTemplatesCompanion(
-      id: id ?? this.id,
-      categoryId: categoryId ?? this.categoryId,
-      amount: amount ?? this.amount,
-      note: note ?? this.note,
-      dayOfMonth: dayOfMonth ?? this.dayOfMonth,
-      active: active ?? this.active,
-      lastGeneratedYearMonth:
-          lastGeneratedYearMonth ?? this.lastGeneratedYearMonth,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (categoryId.present) {
-      map['category_id'] = Variable<String>(categoryId.value);
-    }
-    if (amount.present) {
-      map['amount'] = Variable<int>(amount.value);
-    }
-    if (note.present) {
-      map['note'] = Variable<String>(note.value);
-    }
-    if (dayOfMonth.present) {
-      map['day_of_month'] = Variable<int>(dayOfMonth.value);
-    }
-    if (active.present) {
-      map['active'] = Variable<bool>(active.value);
-    }
-    if (lastGeneratedYearMonth.present) {
-      map['last_generated_year_month'] =
-          Variable<int>(lastGeneratedYearMonth.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('RecurringTemplatesCompanion(')
-          ..write('id: $id, ')
-          ..write('categoryId: $categoryId, ')
-          ..write('amount: $amount, ')
-          ..write('note: $note, ')
-          ..write('dayOfMonth: $dayOfMonth, ')
-          ..write('active: $active, ')
-          ..write('lastGeneratedYearMonth: $lastGeneratedYearMonth')
           ..write(')'))
         .toString();
   }
@@ -1309,6 +959,626 @@ class PaymentMethodsCompanion extends UpdateCompanion<PaymentMethod> {
           ..write('last4: $last4, ')
           ..write('billingDay: $billingDay, ')
           ..write('dueDay: $dueDay')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RecurringTemplatesTable extends RecurringTemplates
+    with TableInfo<$RecurringTemplatesTable, RecurringTemplate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RecurringTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _categoryIdMeta =
+      const VerificationMeta('categoryId');
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+      'category_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+      'amount', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _dayOfMonthMeta =
+      const VerificationMeta('dayOfMonth');
+  @override
+  late final GeneratedColumn<int> dayOfMonth = GeneratedColumn<int>(
+      'day_of_month', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _activeMeta = const VerificationMeta('active');
+  @override
+  late final GeneratedColumn<bool> active = GeneratedColumn<bool>(
+      'active', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("active" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _lastGeneratedYearMonthMeta =
+      const VerificationMeta('lastGeneratedYearMonth');
+  @override
+  late final GeneratedColumn<int> lastGeneratedYearMonth = GeneratedColumn<int>(
+      'last_generated_year_month', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _modeMeta = const VerificationMeta('mode');
+  @override
+  late final GeneratedColumn<String> mode = GeneratedColumn<String>(
+      'mode', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('auto'));
+  static const VerificationMeta _weekdaysMeta =
+      const VerificationMeta('weekdays');
+  @override
+  late final GeneratedColumn<int> weekdays = GeneratedColumn<int>(
+      'weekdays', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _reminderTimeMeta =
+      const VerificationMeta('reminderTime');
+  @override
+  late final GeneratedColumn<String> reminderTime = GeneratedColumn<String>(
+      'reminder_time', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _paymentMethodIdMeta =
+      const VerificationMeta('paymentMethodId');
+  @override
+  late final GeneratedColumn<int> paymentMethodId = GeneratedColumn<int>(
+      'payment_method_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _startDateMeta =
+      const VerificationMeta('startDate');
+  @override
+  late final GeneratedColumn<DateTime> startDate = GeneratedColumn<DateTime>(
+      'start_date', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        categoryId,
+        amount,
+        note,
+        dayOfMonth,
+        active,
+        lastGeneratedYearMonth,
+        mode,
+        weekdays,
+        reminderTime,
+        paymentMethodId,
+        startDate
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'recurring_templates';
+  @override
+  VerificationContext validateIntegrity(Insertable<RecurringTemplate> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+          _categoryIdMeta,
+          categoryId.isAcceptableOrUnknown(
+              data['category_id']!, _categoryIdMeta));
+    } else if (isInserting) {
+      context.missing(_categoryIdMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(_amountMeta,
+          amount.isAcceptableOrUnknown(data['amount']!, _amountMeta));
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('day_of_month')) {
+      context.handle(
+          _dayOfMonthMeta,
+          dayOfMonth.isAcceptableOrUnknown(
+              data['day_of_month']!, _dayOfMonthMeta));
+    } else if (isInserting) {
+      context.missing(_dayOfMonthMeta);
+    }
+    if (data.containsKey('active')) {
+      context.handle(_activeMeta,
+          active.isAcceptableOrUnknown(data['active']!, _activeMeta));
+    }
+    if (data.containsKey('last_generated_year_month')) {
+      context.handle(
+          _lastGeneratedYearMonthMeta,
+          lastGeneratedYearMonth.isAcceptableOrUnknown(
+              data['last_generated_year_month']!, _lastGeneratedYearMonthMeta));
+    } else if (isInserting) {
+      context.missing(_lastGeneratedYearMonthMeta);
+    }
+    if (data.containsKey('mode')) {
+      context.handle(
+          _modeMeta, mode.isAcceptableOrUnknown(data['mode']!, _modeMeta));
+    }
+    if (data.containsKey('weekdays')) {
+      context.handle(_weekdaysMeta,
+          weekdays.isAcceptableOrUnknown(data['weekdays']!, _weekdaysMeta));
+    }
+    if (data.containsKey('reminder_time')) {
+      context.handle(
+          _reminderTimeMeta,
+          reminderTime.isAcceptableOrUnknown(
+              data['reminder_time']!, _reminderTimeMeta));
+    }
+    if (data.containsKey('payment_method_id')) {
+      context.handle(
+          _paymentMethodIdMeta,
+          paymentMethodId.isAcceptableOrUnknown(
+              data['payment_method_id']!, _paymentMethodIdMeta));
+    }
+    if (data.containsKey('start_date')) {
+      context.handle(_startDateMeta,
+          startDate.isAcceptableOrUnknown(data['start_date']!, _startDateMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RecurringTemplate map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RecurringTemplate(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      categoryId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}category_id'])!,
+      amount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note'])!,
+      dayOfMonth: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}day_of_month'])!,
+      active: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}active'])!,
+      lastGeneratedYearMonth: attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}last_generated_year_month'])!,
+      mode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mode'])!,
+      weekdays: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}weekdays']),
+      reminderTime: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}reminder_time']),
+      paymentMethodId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}payment_method_id']),
+      startDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}start_date']),
+    );
+  }
+
+  @override
+  $RecurringTemplatesTable createAlias(String alias) {
+    return $RecurringTemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class RecurringTemplate extends DataClass
+    implements Insertable<RecurringTemplate> {
+  final int id;
+  final String categoryId;
+  final int amount;
+  final String note;
+  final int dayOfMonth;
+  final bool active;
+  final int lastGeneratedYearMonth;
+
+  /// RF47: 'auto' (pago fijo mensual, se registra solo) o 'confirm' (gasto
+  /// habitual: pide confirmación cada día programado). Ver
+  /// `core/utils/habitual.dart`. En modo confirm no se usan `dayOfMonth` ni
+  /// `lastGeneratedYearMonth` (quedan en 0).
+  final String mode;
+
+  /// Solo modo confirm: días como máscara de bits (lunes = 1 … domingo = 64),
+  /// hora del recordatorio "HH:mm" (RF48) y método de pago del gasto.
+  final int? weekdays;
+  final String? reminderTime;
+  final int? paymentMethodId;
+
+  /// Solo modo confirm: desde qué día hay pendientes (RF49). Se fija al crear
+  /// y al reactivar, para que los días en pausa no aparezcan como pendientes.
+  final DateTime? startDate;
+  const RecurringTemplate(
+      {required this.id,
+      required this.categoryId,
+      required this.amount,
+      required this.note,
+      required this.dayOfMonth,
+      required this.active,
+      required this.lastGeneratedYearMonth,
+      required this.mode,
+      this.weekdays,
+      this.reminderTime,
+      this.paymentMethodId,
+      this.startDate});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['category_id'] = Variable<String>(categoryId);
+    map['amount'] = Variable<int>(amount);
+    map['note'] = Variable<String>(note);
+    map['day_of_month'] = Variable<int>(dayOfMonth);
+    map['active'] = Variable<bool>(active);
+    map['last_generated_year_month'] = Variable<int>(lastGeneratedYearMonth);
+    map['mode'] = Variable<String>(mode);
+    if (!nullToAbsent || weekdays != null) {
+      map['weekdays'] = Variable<int>(weekdays);
+    }
+    if (!nullToAbsent || reminderTime != null) {
+      map['reminder_time'] = Variable<String>(reminderTime);
+    }
+    if (!nullToAbsent || paymentMethodId != null) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId);
+    }
+    if (!nullToAbsent || startDate != null) {
+      map['start_date'] = Variable<DateTime>(startDate);
+    }
+    return map;
+  }
+
+  RecurringTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return RecurringTemplatesCompanion(
+      id: Value(id),
+      categoryId: Value(categoryId),
+      amount: Value(amount),
+      note: Value(note),
+      dayOfMonth: Value(dayOfMonth),
+      active: Value(active),
+      lastGeneratedYearMonth: Value(lastGeneratedYearMonth),
+      mode: Value(mode),
+      weekdays: weekdays == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekdays),
+      reminderTime: reminderTime == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reminderTime),
+      paymentMethodId: paymentMethodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethodId),
+      startDate: startDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startDate),
+    );
+  }
+
+  factory RecurringTemplate.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RecurringTemplate(
+      id: serializer.fromJson<int>(json['id']),
+      categoryId: serializer.fromJson<String>(json['categoryId']),
+      amount: serializer.fromJson<int>(json['amount']),
+      note: serializer.fromJson<String>(json['note']),
+      dayOfMonth: serializer.fromJson<int>(json['dayOfMonth']),
+      active: serializer.fromJson<bool>(json['active']),
+      lastGeneratedYearMonth:
+          serializer.fromJson<int>(json['lastGeneratedYearMonth']),
+      mode: serializer.fromJson<String>(json['mode']),
+      weekdays: serializer.fromJson<int?>(json['weekdays']),
+      reminderTime: serializer.fromJson<String?>(json['reminderTime']),
+      paymentMethodId: serializer.fromJson<int?>(json['paymentMethodId']),
+      startDate: serializer.fromJson<DateTime?>(json['startDate']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'categoryId': serializer.toJson<String>(categoryId),
+      'amount': serializer.toJson<int>(amount),
+      'note': serializer.toJson<String>(note),
+      'dayOfMonth': serializer.toJson<int>(dayOfMonth),
+      'active': serializer.toJson<bool>(active),
+      'lastGeneratedYearMonth': serializer.toJson<int>(lastGeneratedYearMonth),
+      'mode': serializer.toJson<String>(mode),
+      'weekdays': serializer.toJson<int?>(weekdays),
+      'reminderTime': serializer.toJson<String?>(reminderTime),
+      'paymentMethodId': serializer.toJson<int?>(paymentMethodId),
+      'startDate': serializer.toJson<DateTime?>(startDate),
+    };
+  }
+
+  RecurringTemplate copyWith(
+          {int? id,
+          String? categoryId,
+          int? amount,
+          String? note,
+          int? dayOfMonth,
+          bool? active,
+          int? lastGeneratedYearMonth,
+          String? mode,
+          Value<int?> weekdays = const Value.absent(),
+          Value<String?> reminderTime = const Value.absent(),
+          Value<int?> paymentMethodId = const Value.absent(),
+          Value<DateTime?> startDate = const Value.absent()}) =>
+      RecurringTemplate(
+        id: id ?? this.id,
+        categoryId: categoryId ?? this.categoryId,
+        amount: amount ?? this.amount,
+        note: note ?? this.note,
+        dayOfMonth: dayOfMonth ?? this.dayOfMonth,
+        active: active ?? this.active,
+        lastGeneratedYearMonth:
+            lastGeneratedYearMonth ?? this.lastGeneratedYearMonth,
+        mode: mode ?? this.mode,
+        weekdays: weekdays.present ? weekdays.value : this.weekdays,
+        reminderTime:
+            reminderTime.present ? reminderTime.value : this.reminderTime,
+        paymentMethodId: paymentMethodId.present
+            ? paymentMethodId.value
+            : this.paymentMethodId,
+        startDate: startDate.present ? startDate.value : this.startDate,
+      );
+  RecurringTemplate copyWithCompanion(RecurringTemplatesCompanion data) {
+    return RecurringTemplate(
+      id: data.id.present ? data.id.value : this.id,
+      categoryId:
+          data.categoryId.present ? data.categoryId.value : this.categoryId,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      note: data.note.present ? data.note.value : this.note,
+      dayOfMonth:
+          data.dayOfMonth.present ? data.dayOfMonth.value : this.dayOfMonth,
+      active: data.active.present ? data.active.value : this.active,
+      lastGeneratedYearMonth: data.lastGeneratedYearMonth.present
+          ? data.lastGeneratedYearMonth.value
+          : this.lastGeneratedYearMonth,
+      mode: data.mode.present ? data.mode.value : this.mode,
+      weekdays: data.weekdays.present ? data.weekdays.value : this.weekdays,
+      reminderTime: data.reminderTime.present
+          ? data.reminderTime.value
+          : this.reminderTime,
+      paymentMethodId: data.paymentMethodId.present
+          ? data.paymentMethodId.value
+          : this.paymentMethodId,
+      startDate: data.startDate.present ? data.startDate.value : this.startDate,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecurringTemplate(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('amount: $amount, ')
+          ..write('note: $note, ')
+          ..write('dayOfMonth: $dayOfMonth, ')
+          ..write('active: $active, ')
+          ..write('lastGeneratedYearMonth: $lastGeneratedYearMonth, ')
+          ..write('mode: $mode, ')
+          ..write('weekdays: $weekdays, ')
+          ..write('reminderTime: $reminderTime, ')
+          ..write('paymentMethodId: $paymentMethodId, ')
+          ..write('startDate: $startDate')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      categoryId,
+      amount,
+      note,
+      dayOfMonth,
+      active,
+      lastGeneratedYearMonth,
+      mode,
+      weekdays,
+      reminderTime,
+      paymentMethodId,
+      startDate);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RecurringTemplate &&
+          other.id == this.id &&
+          other.categoryId == this.categoryId &&
+          other.amount == this.amount &&
+          other.note == this.note &&
+          other.dayOfMonth == this.dayOfMonth &&
+          other.active == this.active &&
+          other.lastGeneratedYearMonth == this.lastGeneratedYearMonth &&
+          other.mode == this.mode &&
+          other.weekdays == this.weekdays &&
+          other.reminderTime == this.reminderTime &&
+          other.paymentMethodId == this.paymentMethodId &&
+          other.startDate == this.startDate);
+}
+
+class RecurringTemplatesCompanion extends UpdateCompanion<RecurringTemplate> {
+  final Value<int> id;
+  final Value<String> categoryId;
+  final Value<int> amount;
+  final Value<String> note;
+  final Value<int> dayOfMonth;
+  final Value<bool> active;
+  final Value<int> lastGeneratedYearMonth;
+  final Value<String> mode;
+  final Value<int?> weekdays;
+  final Value<String?> reminderTime;
+  final Value<int?> paymentMethodId;
+  final Value<DateTime?> startDate;
+  const RecurringTemplatesCompanion({
+    this.id = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.note = const Value.absent(),
+    this.dayOfMonth = const Value.absent(),
+    this.active = const Value.absent(),
+    this.lastGeneratedYearMonth = const Value.absent(),
+    this.mode = const Value.absent(),
+    this.weekdays = const Value.absent(),
+    this.reminderTime = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
+    this.startDate = const Value.absent(),
+  });
+  RecurringTemplatesCompanion.insert({
+    this.id = const Value.absent(),
+    required String categoryId,
+    required int amount,
+    this.note = const Value.absent(),
+    required int dayOfMonth,
+    this.active = const Value.absent(),
+    required int lastGeneratedYearMonth,
+    this.mode = const Value.absent(),
+    this.weekdays = const Value.absent(),
+    this.reminderTime = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
+    this.startDate = const Value.absent(),
+  })  : categoryId = Value(categoryId),
+        amount = Value(amount),
+        dayOfMonth = Value(dayOfMonth),
+        lastGeneratedYearMonth = Value(lastGeneratedYearMonth);
+  static Insertable<RecurringTemplate> custom({
+    Expression<int>? id,
+    Expression<String>? categoryId,
+    Expression<int>? amount,
+    Expression<String>? note,
+    Expression<int>? dayOfMonth,
+    Expression<bool>? active,
+    Expression<int>? lastGeneratedYearMonth,
+    Expression<String>? mode,
+    Expression<int>? weekdays,
+    Expression<String>? reminderTime,
+    Expression<int>? paymentMethodId,
+    Expression<DateTime>? startDate,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (categoryId != null) 'category_id': categoryId,
+      if (amount != null) 'amount': amount,
+      if (note != null) 'note': note,
+      if (dayOfMonth != null) 'day_of_month': dayOfMonth,
+      if (active != null) 'active': active,
+      if (lastGeneratedYearMonth != null)
+        'last_generated_year_month': lastGeneratedYearMonth,
+      if (mode != null) 'mode': mode,
+      if (weekdays != null) 'weekdays': weekdays,
+      if (reminderTime != null) 'reminder_time': reminderTime,
+      if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
+      if (startDate != null) 'start_date': startDate,
+    });
+  }
+
+  RecurringTemplatesCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? categoryId,
+      Value<int>? amount,
+      Value<String>? note,
+      Value<int>? dayOfMonth,
+      Value<bool>? active,
+      Value<int>? lastGeneratedYearMonth,
+      Value<String>? mode,
+      Value<int?>? weekdays,
+      Value<String?>? reminderTime,
+      Value<int?>? paymentMethodId,
+      Value<DateTime?>? startDate}) {
+    return RecurringTemplatesCompanion(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      amount: amount ?? this.amount,
+      note: note ?? this.note,
+      dayOfMonth: dayOfMonth ?? this.dayOfMonth,
+      active: active ?? this.active,
+      lastGeneratedYearMonth:
+          lastGeneratedYearMonth ?? this.lastGeneratedYearMonth,
+      mode: mode ?? this.mode,
+      weekdays: weekdays ?? this.weekdays,
+      reminderTime: reminderTime ?? this.reminderTime,
+      paymentMethodId: paymentMethodId ?? this.paymentMethodId,
+      startDate: startDate ?? this.startDate,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (dayOfMonth.present) {
+      map['day_of_month'] = Variable<int>(dayOfMonth.value);
+    }
+    if (active.present) {
+      map['active'] = Variable<bool>(active.value);
+    }
+    if (lastGeneratedYearMonth.present) {
+      map['last_generated_year_month'] =
+          Variable<int>(lastGeneratedYearMonth.value);
+    }
+    if (mode.present) {
+      map['mode'] = Variable<String>(mode.value);
+    }
+    if (weekdays.present) {
+      map['weekdays'] = Variable<int>(weekdays.value);
+    }
+    if (reminderTime.present) {
+      map['reminder_time'] = Variable<String>(reminderTime.value);
+    }
+    if (paymentMethodId.present) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId.value);
+    }
+    if (startDate.present) {
+      map['start_date'] = Variable<DateTime>(startDate.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecurringTemplatesCompanion(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('amount: $amount, ')
+          ..write('note: $note, ')
+          ..write('dayOfMonth: $dayOfMonth, ')
+          ..write('active: $active, ')
+          ..write('lastGeneratedYearMonth: $lastGeneratedYearMonth, ')
+          ..write('mode: $mode, ')
+          ..write('weekdays: $weekdays, ')
+          ..write('reminderTime: $reminderTime, ')
+          ..write('paymentMethodId: $paymentMethodId, ')
+          ..write('startDate: $startDate')
           ..write(')'))
         .toString();
   }
@@ -1752,743 +2022,6 @@ class InstallmentPlansCompanion extends UpdateCompanion<InstallmentPlan> {
   }
 }
 
-class $TransactionsTable extends Transactions
-    with TableInfo<$TransactionsTable, Transaction> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $TransactionsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _categoryIdMeta =
-      const VerificationMeta('categoryId');
-  @override
-  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
-      'category_id', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
-  @override
-  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
-      'amount', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _dateMeta = const VerificationMeta('date');
-  @override
-  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
-      'date', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
-  static const VerificationMeta _noteMeta = const VerificationMeta('note');
-  @override
-  late final GeneratedColumn<String> note = GeneratedColumn<String>(
-      'note', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _isRecurringMeta =
-      const VerificationMeta('isRecurring');
-  @override
-  late final GeneratedColumn<bool> isRecurring = GeneratedColumn<bool>(
-      'is_recurring', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("is_recurring" IN (0, 1))'),
-      defaultValue: const Constant(false));
-  static const VerificationMeta _recurringTemplateIdMeta =
-      const VerificationMeta('recurringTemplateId');
-  @override
-  late final GeneratedColumn<int> recurringTemplateId = GeneratedColumn<int>(
-      'recurring_template_id', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _paymentMethodIdMeta =
-      const VerificationMeta('paymentMethodId');
-  @override
-  late final GeneratedColumn<int> paymentMethodId = GeneratedColumn<int>(
-      'payment_method_id', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _installmentPlanIdMeta =
-      const VerificationMeta('installmentPlanId');
-  @override
-  late final GeneratedColumn<int> installmentPlanId = GeneratedColumn<int>(
-      'installment_plan_id', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _installmentNumberMeta =
-      const VerificationMeta('installmentNumber');
-  @override
-  late final GeneratedColumn<int> installmentNumber = GeneratedColumn<int>(
-      'installment_number', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  @override
-  List<GeneratedColumn> get $columns => [
-        id,
-        categoryId,
-        amount,
-        date,
-        note,
-        isRecurring,
-        recurringTemplateId,
-        paymentMethodId,
-        installmentPlanId,
-        installmentNumber
-      ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'transactions';
-  @override
-  VerificationContext validateIntegrity(Insertable<Transaction> instance,
-      {bool isInserting = false}) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('category_id')) {
-      context.handle(
-          _categoryIdMeta,
-          categoryId.isAcceptableOrUnknown(
-              data['category_id']!, _categoryIdMeta));
-    } else if (isInserting) {
-      context.missing(_categoryIdMeta);
-    }
-    if (data.containsKey('amount')) {
-      context.handle(_amountMeta,
-          amount.isAcceptableOrUnknown(data['amount']!, _amountMeta));
-    } else if (isInserting) {
-      context.missing(_amountMeta);
-    }
-    if (data.containsKey('date')) {
-      context.handle(
-          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
-    } else if (isInserting) {
-      context.missing(_dateMeta);
-    }
-    if (data.containsKey('note')) {
-      context.handle(
-          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
-    }
-    if (data.containsKey('is_recurring')) {
-      context.handle(
-          _isRecurringMeta,
-          isRecurring.isAcceptableOrUnknown(
-              data['is_recurring']!, _isRecurringMeta));
-    }
-    if (data.containsKey('recurring_template_id')) {
-      context.handle(
-          _recurringTemplateIdMeta,
-          recurringTemplateId.isAcceptableOrUnknown(
-              data['recurring_template_id']!, _recurringTemplateIdMeta));
-    }
-    if (data.containsKey('payment_method_id')) {
-      context.handle(
-          _paymentMethodIdMeta,
-          paymentMethodId.isAcceptableOrUnknown(
-              data['payment_method_id']!, _paymentMethodIdMeta));
-    }
-    if (data.containsKey('installment_plan_id')) {
-      context.handle(
-          _installmentPlanIdMeta,
-          installmentPlanId.isAcceptableOrUnknown(
-              data['installment_plan_id']!, _installmentPlanIdMeta));
-    }
-    if (data.containsKey('installment_number')) {
-      context.handle(
-          _installmentNumberMeta,
-          installmentNumber.isAcceptableOrUnknown(
-              data['installment_number']!, _installmentNumberMeta));
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  Transaction map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Transaction(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      categoryId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}category_id'])!,
-      amount: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
-      date: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
-      note: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}note'])!,
-      isRecurring: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_recurring'])!,
-      recurringTemplateId: attachedDatabase.typeMapping.read(
-          DriftSqlType.int, data['${effectivePrefix}recurring_template_id']),
-      paymentMethodId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}payment_method_id']),
-      installmentPlanId: attachedDatabase.typeMapping.read(
-          DriftSqlType.int, data['${effectivePrefix}installment_plan_id']),
-      installmentNumber: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}installment_number']),
-    );
-  }
-
-  @override
-  $TransactionsTable createAlias(String alias) {
-    return $TransactionsTable(attachedDatabase, alias);
-  }
-}
-
-class Transaction extends DataClass implements Insertable<Transaction> {
-  final int id;
-  final String categoryId;
-  final int amount;
-  final DateTime date;
-  final String note;
-  final bool isRecurring;
-
-  /// Plantilla recurrente (RF12) que generó este gasto, para poder ir de un
-  /// gasto a su recurrente. Null en gastos manuales, en los anteriores a v9
-  /// que no se pudieron enlazar, y si la plantilla se eliminó.
-  final int? recurringTemplateId;
-
-  /// RF32: con qué se pagó. Null = "Sin especificar": todos los gastos
-  /// anteriores a v10 (RNF18) y los que el usuario no asignó.
-  final int? paymentMethodId;
-
-  /// RF34: plan de cuotas al que pertenece, y qué cuota es (desde 1). El
-  /// prepago (RF35) también lleva el plan, pero sin número de cuota.
-  final int? installmentPlanId;
-  final int? installmentNumber;
-  const Transaction(
-      {required this.id,
-      required this.categoryId,
-      required this.amount,
-      required this.date,
-      required this.note,
-      required this.isRecurring,
-      this.recurringTemplateId,
-      this.paymentMethodId,
-      this.installmentPlanId,
-      this.installmentNumber});
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['category_id'] = Variable<String>(categoryId);
-    map['amount'] = Variable<int>(amount);
-    map['date'] = Variable<DateTime>(date);
-    map['note'] = Variable<String>(note);
-    map['is_recurring'] = Variable<bool>(isRecurring);
-    if (!nullToAbsent || recurringTemplateId != null) {
-      map['recurring_template_id'] = Variable<int>(recurringTemplateId);
-    }
-    if (!nullToAbsent || paymentMethodId != null) {
-      map['payment_method_id'] = Variable<int>(paymentMethodId);
-    }
-    if (!nullToAbsent || installmentPlanId != null) {
-      map['installment_plan_id'] = Variable<int>(installmentPlanId);
-    }
-    if (!nullToAbsent || installmentNumber != null) {
-      map['installment_number'] = Variable<int>(installmentNumber);
-    }
-    return map;
-  }
-
-  TransactionsCompanion toCompanion(bool nullToAbsent) {
-    return TransactionsCompanion(
-      id: Value(id),
-      categoryId: Value(categoryId),
-      amount: Value(amount),
-      date: Value(date),
-      note: Value(note),
-      isRecurring: Value(isRecurring),
-      recurringTemplateId: recurringTemplateId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(recurringTemplateId),
-      paymentMethodId: paymentMethodId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(paymentMethodId),
-      installmentPlanId: installmentPlanId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(installmentPlanId),
-      installmentNumber: installmentNumber == null && nullToAbsent
-          ? const Value.absent()
-          : Value(installmentNumber),
-    );
-  }
-
-  factory Transaction.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Transaction(
-      id: serializer.fromJson<int>(json['id']),
-      categoryId: serializer.fromJson<String>(json['categoryId']),
-      amount: serializer.fromJson<int>(json['amount']),
-      date: serializer.fromJson<DateTime>(json['date']),
-      note: serializer.fromJson<String>(json['note']),
-      isRecurring: serializer.fromJson<bool>(json['isRecurring']),
-      recurringTemplateId:
-          serializer.fromJson<int?>(json['recurringTemplateId']),
-      paymentMethodId: serializer.fromJson<int?>(json['paymentMethodId']),
-      installmentPlanId: serializer.fromJson<int?>(json['installmentPlanId']),
-      installmentNumber: serializer.fromJson<int?>(json['installmentNumber']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'categoryId': serializer.toJson<String>(categoryId),
-      'amount': serializer.toJson<int>(amount),
-      'date': serializer.toJson<DateTime>(date),
-      'note': serializer.toJson<String>(note),
-      'isRecurring': serializer.toJson<bool>(isRecurring),
-      'recurringTemplateId': serializer.toJson<int?>(recurringTemplateId),
-      'paymentMethodId': serializer.toJson<int?>(paymentMethodId),
-      'installmentPlanId': serializer.toJson<int?>(installmentPlanId),
-      'installmentNumber': serializer.toJson<int?>(installmentNumber),
-    };
-  }
-
-  Transaction copyWith(
-          {int? id,
-          String? categoryId,
-          int? amount,
-          DateTime? date,
-          String? note,
-          bool? isRecurring,
-          Value<int?> recurringTemplateId = const Value.absent(),
-          Value<int?> paymentMethodId = const Value.absent(),
-          Value<int?> installmentPlanId = const Value.absent(),
-          Value<int?> installmentNumber = const Value.absent()}) =>
-      Transaction(
-        id: id ?? this.id,
-        categoryId: categoryId ?? this.categoryId,
-        amount: amount ?? this.amount,
-        date: date ?? this.date,
-        note: note ?? this.note,
-        isRecurring: isRecurring ?? this.isRecurring,
-        recurringTemplateId: recurringTemplateId.present
-            ? recurringTemplateId.value
-            : this.recurringTemplateId,
-        paymentMethodId: paymentMethodId.present
-            ? paymentMethodId.value
-            : this.paymentMethodId,
-        installmentPlanId: installmentPlanId.present
-            ? installmentPlanId.value
-            : this.installmentPlanId,
-        installmentNumber: installmentNumber.present
-            ? installmentNumber.value
-            : this.installmentNumber,
-      );
-  Transaction copyWithCompanion(TransactionsCompanion data) {
-    return Transaction(
-      id: data.id.present ? data.id.value : this.id,
-      categoryId:
-          data.categoryId.present ? data.categoryId.value : this.categoryId,
-      amount: data.amount.present ? data.amount.value : this.amount,
-      date: data.date.present ? data.date.value : this.date,
-      note: data.note.present ? data.note.value : this.note,
-      isRecurring:
-          data.isRecurring.present ? data.isRecurring.value : this.isRecurring,
-      recurringTemplateId: data.recurringTemplateId.present
-          ? data.recurringTemplateId.value
-          : this.recurringTemplateId,
-      paymentMethodId: data.paymentMethodId.present
-          ? data.paymentMethodId.value
-          : this.paymentMethodId,
-      installmentPlanId: data.installmentPlanId.present
-          ? data.installmentPlanId.value
-          : this.installmentPlanId,
-      installmentNumber: data.installmentNumber.present
-          ? data.installmentNumber.value
-          : this.installmentNumber,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('Transaction(')
-          ..write('id: $id, ')
-          ..write('categoryId: $categoryId, ')
-          ..write('amount: $amount, ')
-          ..write('date: $date, ')
-          ..write('note: $note, ')
-          ..write('isRecurring: $isRecurring, ')
-          ..write('recurringTemplateId: $recurringTemplateId, ')
-          ..write('paymentMethodId: $paymentMethodId, ')
-          ..write('installmentPlanId: $installmentPlanId, ')
-          ..write('installmentNumber: $installmentNumber')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-      id,
-      categoryId,
-      amount,
-      date,
-      note,
-      isRecurring,
-      recurringTemplateId,
-      paymentMethodId,
-      installmentPlanId,
-      installmentNumber);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is Transaction &&
-          other.id == this.id &&
-          other.categoryId == this.categoryId &&
-          other.amount == this.amount &&
-          other.date == this.date &&
-          other.note == this.note &&
-          other.isRecurring == this.isRecurring &&
-          other.recurringTemplateId == this.recurringTemplateId &&
-          other.paymentMethodId == this.paymentMethodId &&
-          other.installmentPlanId == this.installmentPlanId &&
-          other.installmentNumber == this.installmentNumber);
-}
-
-class TransactionsCompanion extends UpdateCompanion<Transaction> {
-  final Value<int> id;
-  final Value<String> categoryId;
-  final Value<int> amount;
-  final Value<DateTime> date;
-  final Value<String> note;
-  final Value<bool> isRecurring;
-  final Value<int?> recurringTemplateId;
-  final Value<int?> paymentMethodId;
-  final Value<int?> installmentPlanId;
-  final Value<int?> installmentNumber;
-  const TransactionsCompanion({
-    this.id = const Value.absent(),
-    this.categoryId = const Value.absent(),
-    this.amount = const Value.absent(),
-    this.date = const Value.absent(),
-    this.note = const Value.absent(),
-    this.isRecurring = const Value.absent(),
-    this.recurringTemplateId = const Value.absent(),
-    this.paymentMethodId = const Value.absent(),
-    this.installmentPlanId = const Value.absent(),
-    this.installmentNumber = const Value.absent(),
-  });
-  TransactionsCompanion.insert({
-    this.id = const Value.absent(),
-    required String categoryId,
-    required int amount,
-    required DateTime date,
-    this.note = const Value.absent(),
-    this.isRecurring = const Value.absent(),
-    this.recurringTemplateId = const Value.absent(),
-    this.paymentMethodId = const Value.absent(),
-    this.installmentPlanId = const Value.absent(),
-    this.installmentNumber = const Value.absent(),
-  })  : categoryId = Value(categoryId),
-        amount = Value(amount),
-        date = Value(date);
-  static Insertable<Transaction> custom({
-    Expression<int>? id,
-    Expression<String>? categoryId,
-    Expression<int>? amount,
-    Expression<DateTime>? date,
-    Expression<String>? note,
-    Expression<bool>? isRecurring,
-    Expression<int>? recurringTemplateId,
-    Expression<int>? paymentMethodId,
-    Expression<int>? installmentPlanId,
-    Expression<int>? installmentNumber,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (categoryId != null) 'category_id': categoryId,
-      if (amount != null) 'amount': amount,
-      if (date != null) 'date': date,
-      if (note != null) 'note': note,
-      if (isRecurring != null) 'is_recurring': isRecurring,
-      if (recurringTemplateId != null)
-        'recurring_template_id': recurringTemplateId,
-      if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
-      if (installmentPlanId != null) 'installment_plan_id': installmentPlanId,
-      if (installmentNumber != null) 'installment_number': installmentNumber,
-    });
-  }
-
-  TransactionsCompanion copyWith(
-      {Value<int>? id,
-      Value<String>? categoryId,
-      Value<int>? amount,
-      Value<DateTime>? date,
-      Value<String>? note,
-      Value<bool>? isRecurring,
-      Value<int?>? recurringTemplateId,
-      Value<int?>? paymentMethodId,
-      Value<int?>? installmentPlanId,
-      Value<int?>? installmentNumber}) {
-    return TransactionsCompanion(
-      id: id ?? this.id,
-      categoryId: categoryId ?? this.categoryId,
-      amount: amount ?? this.amount,
-      date: date ?? this.date,
-      note: note ?? this.note,
-      isRecurring: isRecurring ?? this.isRecurring,
-      recurringTemplateId: recurringTemplateId ?? this.recurringTemplateId,
-      paymentMethodId: paymentMethodId ?? this.paymentMethodId,
-      installmentPlanId: installmentPlanId ?? this.installmentPlanId,
-      installmentNumber: installmentNumber ?? this.installmentNumber,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (categoryId.present) {
-      map['category_id'] = Variable<String>(categoryId.value);
-    }
-    if (amount.present) {
-      map['amount'] = Variable<int>(amount.value);
-    }
-    if (date.present) {
-      map['date'] = Variable<DateTime>(date.value);
-    }
-    if (note.present) {
-      map['note'] = Variable<String>(note.value);
-    }
-    if (isRecurring.present) {
-      map['is_recurring'] = Variable<bool>(isRecurring.value);
-    }
-    if (recurringTemplateId.present) {
-      map['recurring_template_id'] = Variable<int>(recurringTemplateId.value);
-    }
-    if (paymentMethodId.present) {
-      map['payment_method_id'] = Variable<int>(paymentMethodId.value);
-    }
-    if (installmentPlanId.present) {
-      map['installment_plan_id'] = Variable<int>(installmentPlanId.value);
-    }
-    if (installmentNumber.present) {
-      map['installment_number'] = Variable<int>(installmentNumber.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('TransactionsCompanion(')
-          ..write('id: $id, ')
-          ..write('categoryId: $categoryId, ')
-          ..write('amount: $amount, ')
-          ..write('date: $date, ')
-          ..write('note: $note, ')
-          ..write('isRecurring: $isRecurring, ')
-          ..write('recurringTemplateId: $recurringTemplateId, ')
-          ..write('paymentMethodId: $paymentMethodId, ')
-          ..write('installmentPlanId: $installmentPlanId, ')
-          ..write('installmentNumber: $installmentNumber')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $AppSettingsTable extends AppSettings
-    with TableInfo<$AppSettingsTable, AppSetting> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $AppSettingsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _keyMeta = const VerificationMeta('key');
-  @override
-  late final GeneratedColumn<String> key = GeneratedColumn<String>(
-      'key', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _valueMeta = const VerificationMeta('value');
-  @override
-  late final GeneratedColumn<String> value = GeneratedColumn<String>(
-      'value', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  @override
-  List<GeneratedColumn> get $columns => [key, value];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'app_settings';
-  @override
-  VerificationContext validateIntegrity(Insertable<AppSetting> instance,
-      {bool isInserting = false}) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('key')) {
-      context.handle(
-          _keyMeta, key.isAcceptableOrUnknown(data['key']!, _keyMeta));
-    } else if (isInserting) {
-      context.missing(_keyMeta);
-    }
-    if (data.containsKey('value')) {
-      context.handle(
-          _valueMeta, value.isAcceptableOrUnknown(data['value']!, _valueMeta));
-    } else if (isInserting) {
-      context.missing(_valueMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {key};
-  @override
-  AppSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return AppSetting(
-      key: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
-      value: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}value'])!,
-    );
-  }
-
-  @override
-  $AppSettingsTable createAlias(String alias) {
-    return $AppSettingsTable(attachedDatabase, alias);
-  }
-}
-
-class AppSetting extends DataClass implements Insertable<AppSetting> {
-  final String key;
-  final String value;
-  const AppSetting({required this.key, required this.value});
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['key'] = Variable<String>(key);
-    map['value'] = Variable<String>(value);
-    return map;
-  }
-
-  AppSettingsCompanion toCompanion(bool nullToAbsent) {
-    return AppSettingsCompanion(
-      key: Value(key),
-      value: Value(value),
-    );
-  }
-
-  factory AppSetting.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return AppSetting(
-      key: serializer.fromJson<String>(json['key']),
-      value: serializer.fromJson<String>(json['value']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'key': serializer.toJson<String>(key),
-      'value': serializer.toJson<String>(value),
-    };
-  }
-
-  AppSetting copyWith({String? key, String? value}) => AppSetting(
-        key: key ?? this.key,
-        value: value ?? this.value,
-      );
-  AppSetting copyWithCompanion(AppSettingsCompanion data) {
-    return AppSetting(
-      key: data.key.present ? data.key.value : this.key,
-      value: data.value.present ? data.value.value : this.value,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('AppSetting(')
-          ..write('key: $key, ')
-          ..write('value: $value')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(key, value);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is AppSetting &&
-          other.key == this.key &&
-          other.value == this.value);
-}
-
-class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
-  final Value<String> key;
-  final Value<String> value;
-  final Value<int> rowid;
-  const AppSettingsCompanion({
-    this.key = const Value.absent(),
-    this.value = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  AppSettingsCompanion.insert({
-    required String key,
-    required String value,
-    this.rowid = const Value.absent(),
-  })  : key = Value(key),
-        value = Value(value);
-  static Insertable<AppSetting> custom({
-    Expression<String>? key,
-    Expression<String>? value,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (key != null) 'key': key,
-      if (value != null) 'value': value,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  AppSettingsCompanion copyWith(
-      {Value<String>? key, Value<String>? value, Value<int>? rowid}) {
-    return AppSettingsCompanion(
-      key: key ?? this.key,
-      value: value ?? this.value,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (key.present) {
-      map['key'] = Variable<String>(key.value);
-    }
-    if (value.present) {
-      map['value'] = Variable<String>(value.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('AppSettingsCompanion(')
-          ..write('key: $key, ')
-          ..write('value: $value, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $SavingsGoalsTable extends SavingsGoals
     with TableInfo<$SavingsGoalsTable, SavingsGoal> {
   @override
@@ -2704,6 +2237,838 @@ class SavingsGoalsCompanion extends UpdateCompanion<SavingsGoal> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('targetAmount: $targetAmount')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TransactionsTable extends Transactions
+    with TableInfo<$TransactionsTable, Transaction> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransactionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _categoryIdMeta =
+      const VerificationMeta('categoryId');
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+      'category_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+      'amount', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+      'note', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _isRecurringMeta =
+      const VerificationMeta('isRecurring');
+  @override
+  late final GeneratedColumn<bool> isRecurring = GeneratedColumn<bool>(
+      'is_recurring', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("is_recurring" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _recurringTemplateIdMeta =
+      const VerificationMeta('recurringTemplateId');
+  @override
+  late final GeneratedColumn<int> recurringTemplateId = GeneratedColumn<int>(
+      'recurring_template_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _paymentMethodIdMeta =
+      const VerificationMeta('paymentMethodId');
+  @override
+  late final GeneratedColumn<int> paymentMethodId = GeneratedColumn<int>(
+      'payment_method_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _installmentPlanIdMeta =
+      const VerificationMeta('installmentPlanId');
+  @override
+  late final GeneratedColumn<int> installmentPlanId = GeneratedColumn<int>(
+      'installment_plan_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _installmentNumberMeta =
+      const VerificationMeta('installmentNumber');
+  @override
+  late final GeneratedColumn<int> installmentNumber = GeneratedColumn<int>(
+      'installment_number', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _fundedByGoalIdMeta =
+      const VerificationMeta('fundedByGoalId');
+  @override
+  late final GeneratedColumn<int> fundedByGoalId = GeneratedColumn<int>(
+      'funded_by_goal_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _worthItMeta =
+      const VerificationMeta('worthIt');
+  @override
+  late final GeneratedColumn<bool> worthIt = GeneratedColumn<bool>(
+      'worth_it', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("worth_it" IN (0, 1))'));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        categoryId,
+        amount,
+        date,
+        note,
+        isRecurring,
+        recurringTemplateId,
+        paymentMethodId,
+        installmentPlanId,
+        installmentNumber,
+        fundedByGoalId,
+        worthIt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transactions';
+  @override
+  VerificationContext validateIntegrity(Insertable<Transaction> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+          _categoryIdMeta,
+          categoryId.isAcceptableOrUnknown(
+              data['category_id']!, _categoryIdMeta));
+    } else if (isInserting) {
+      context.missing(_categoryIdMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(_amountMeta,
+          amount.isAcceptableOrUnknown(data['amount']!, _amountMeta));
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+          _noteMeta, note.isAcceptableOrUnknown(data['note']!, _noteMeta));
+    }
+    if (data.containsKey('is_recurring')) {
+      context.handle(
+          _isRecurringMeta,
+          isRecurring.isAcceptableOrUnknown(
+              data['is_recurring']!, _isRecurringMeta));
+    }
+    if (data.containsKey('recurring_template_id')) {
+      context.handle(
+          _recurringTemplateIdMeta,
+          recurringTemplateId.isAcceptableOrUnknown(
+              data['recurring_template_id']!, _recurringTemplateIdMeta));
+    }
+    if (data.containsKey('payment_method_id')) {
+      context.handle(
+          _paymentMethodIdMeta,
+          paymentMethodId.isAcceptableOrUnknown(
+              data['payment_method_id']!, _paymentMethodIdMeta));
+    }
+    if (data.containsKey('installment_plan_id')) {
+      context.handle(
+          _installmentPlanIdMeta,
+          installmentPlanId.isAcceptableOrUnknown(
+              data['installment_plan_id']!, _installmentPlanIdMeta));
+    }
+    if (data.containsKey('installment_number')) {
+      context.handle(
+          _installmentNumberMeta,
+          installmentNumber.isAcceptableOrUnknown(
+              data['installment_number']!, _installmentNumberMeta));
+    }
+    if (data.containsKey('funded_by_goal_id')) {
+      context.handle(
+          _fundedByGoalIdMeta,
+          fundedByGoalId.isAcceptableOrUnknown(
+              data['funded_by_goal_id']!, _fundedByGoalIdMeta));
+    }
+    if (data.containsKey('worth_it')) {
+      context.handle(_worthItMeta,
+          worthIt.isAcceptableOrUnknown(data['worth_it']!, _worthItMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Transaction map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Transaction(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      categoryId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}category_id'])!,
+      amount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      note: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}note'])!,
+      isRecurring: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_recurring'])!,
+      recurringTemplateId: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}recurring_template_id']),
+      paymentMethodId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}payment_method_id']),
+      installmentPlanId: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}installment_plan_id']),
+      installmentNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}installment_number']),
+      fundedByGoalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}funded_by_goal_id']),
+      worthIt: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}worth_it']),
+    );
+  }
+
+  @override
+  $TransactionsTable createAlias(String alias) {
+    return $TransactionsTable(attachedDatabase, alias);
+  }
+}
+
+class Transaction extends DataClass implements Insertable<Transaction> {
+  final int id;
+  final String categoryId;
+  final int amount;
+  final DateTime date;
+  final String note;
+  final bool isRecurring;
+
+  /// Plantilla recurrente (RF12) que generó este gasto, para poder ir de un
+  /// gasto a su recurrente. Null en gastos manuales, en los anteriores a v9
+  /// que no se pudieron enlazar, y si la plantilla se eliminó.
+  final int? recurringTemplateId;
+
+  /// RF32: con qué se pagó. Null = "Sin especificar": todos los gastos
+  /// anteriores a v10 (RNF18) y los que el usuario no asignó.
+  final int? paymentMethodId;
+
+  /// RF34: plan de cuotas al que pertenece, y qué cuota es (desde 1). El
+  /// prepago (RF35) también lleva el plan, pero sin número de cuota.
+  final int? installmentPlanId;
+  final int? installmentNumber;
+
+  /// RF52: meta de ahorro con que se pagó. Descuenta del saldo de la meta y
+  /// no del presupuesto del mes; sigue contando en su categoría en
+  /// Estadísticas.
+  final int? fundedByGoalId;
+
+  /// RF37: revisión semanal. true = "valió la pena", false = "no tanto",
+  /// null = no revisado.
+  final bool? worthIt;
+  const Transaction(
+      {required this.id,
+      required this.categoryId,
+      required this.amount,
+      required this.date,
+      required this.note,
+      required this.isRecurring,
+      this.recurringTemplateId,
+      this.paymentMethodId,
+      this.installmentPlanId,
+      this.installmentNumber,
+      this.fundedByGoalId,
+      this.worthIt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['category_id'] = Variable<String>(categoryId);
+    map['amount'] = Variable<int>(amount);
+    map['date'] = Variable<DateTime>(date);
+    map['note'] = Variable<String>(note);
+    map['is_recurring'] = Variable<bool>(isRecurring);
+    if (!nullToAbsent || recurringTemplateId != null) {
+      map['recurring_template_id'] = Variable<int>(recurringTemplateId);
+    }
+    if (!nullToAbsent || paymentMethodId != null) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId);
+    }
+    if (!nullToAbsent || installmentPlanId != null) {
+      map['installment_plan_id'] = Variable<int>(installmentPlanId);
+    }
+    if (!nullToAbsent || installmentNumber != null) {
+      map['installment_number'] = Variable<int>(installmentNumber);
+    }
+    if (!nullToAbsent || fundedByGoalId != null) {
+      map['funded_by_goal_id'] = Variable<int>(fundedByGoalId);
+    }
+    if (!nullToAbsent || worthIt != null) {
+      map['worth_it'] = Variable<bool>(worthIt);
+    }
+    return map;
+  }
+
+  TransactionsCompanion toCompanion(bool nullToAbsent) {
+    return TransactionsCompanion(
+      id: Value(id),
+      categoryId: Value(categoryId),
+      amount: Value(amount),
+      date: Value(date),
+      note: Value(note),
+      isRecurring: Value(isRecurring),
+      recurringTemplateId: recurringTemplateId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recurringTemplateId),
+      paymentMethodId: paymentMethodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethodId),
+      installmentPlanId: installmentPlanId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(installmentPlanId),
+      installmentNumber: installmentNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(installmentNumber),
+      fundedByGoalId: fundedByGoalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fundedByGoalId),
+      worthIt: worthIt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(worthIt),
+    );
+  }
+
+  factory Transaction.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Transaction(
+      id: serializer.fromJson<int>(json['id']),
+      categoryId: serializer.fromJson<String>(json['categoryId']),
+      amount: serializer.fromJson<int>(json['amount']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      note: serializer.fromJson<String>(json['note']),
+      isRecurring: serializer.fromJson<bool>(json['isRecurring']),
+      recurringTemplateId:
+          serializer.fromJson<int?>(json['recurringTemplateId']),
+      paymentMethodId: serializer.fromJson<int?>(json['paymentMethodId']),
+      installmentPlanId: serializer.fromJson<int?>(json['installmentPlanId']),
+      installmentNumber: serializer.fromJson<int?>(json['installmentNumber']),
+      fundedByGoalId: serializer.fromJson<int?>(json['fundedByGoalId']),
+      worthIt: serializer.fromJson<bool?>(json['worthIt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'categoryId': serializer.toJson<String>(categoryId),
+      'amount': serializer.toJson<int>(amount),
+      'date': serializer.toJson<DateTime>(date),
+      'note': serializer.toJson<String>(note),
+      'isRecurring': serializer.toJson<bool>(isRecurring),
+      'recurringTemplateId': serializer.toJson<int?>(recurringTemplateId),
+      'paymentMethodId': serializer.toJson<int?>(paymentMethodId),
+      'installmentPlanId': serializer.toJson<int?>(installmentPlanId),
+      'installmentNumber': serializer.toJson<int?>(installmentNumber),
+      'fundedByGoalId': serializer.toJson<int?>(fundedByGoalId),
+      'worthIt': serializer.toJson<bool?>(worthIt),
+    };
+  }
+
+  Transaction copyWith(
+          {int? id,
+          String? categoryId,
+          int? amount,
+          DateTime? date,
+          String? note,
+          bool? isRecurring,
+          Value<int?> recurringTemplateId = const Value.absent(),
+          Value<int?> paymentMethodId = const Value.absent(),
+          Value<int?> installmentPlanId = const Value.absent(),
+          Value<int?> installmentNumber = const Value.absent(),
+          Value<int?> fundedByGoalId = const Value.absent(),
+          Value<bool?> worthIt = const Value.absent()}) =>
+      Transaction(
+        id: id ?? this.id,
+        categoryId: categoryId ?? this.categoryId,
+        amount: amount ?? this.amount,
+        date: date ?? this.date,
+        note: note ?? this.note,
+        isRecurring: isRecurring ?? this.isRecurring,
+        recurringTemplateId: recurringTemplateId.present
+            ? recurringTemplateId.value
+            : this.recurringTemplateId,
+        paymentMethodId: paymentMethodId.present
+            ? paymentMethodId.value
+            : this.paymentMethodId,
+        installmentPlanId: installmentPlanId.present
+            ? installmentPlanId.value
+            : this.installmentPlanId,
+        installmentNumber: installmentNumber.present
+            ? installmentNumber.value
+            : this.installmentNumber,
+        fundedByGoalId:
+            fundedByGoalId.present ? fundedByGoalId.value : this.fundedByGoalId,
+        worthIt: worthIt.present ? worthIt.value : this.worthIt,
+      );
+  Transaction copyWithCompanion(TransactionsCompanion data) {
+    return Transaction(
+      id: data.id.present ? data.id.value : this.id,
+      categoryId:
+          data.categoryId.present ? data.categoryId.value : this.categoryId,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      date: data.date.present ? data.date.value : this.date,
+      note: data.note.present ? data.note.value : this.note,
+      isRecurring:
+          data.isRecurring.present ? data.isRecurring.value : this.isRecurring,
+      recurringTemplateId: data.recurringTemplateId.present
+          ? data.recurringTemplateId.value
+          : this.recurringTemplateId,
+      paymentMethodId: data.paymentMethodId.present
+          ? data.paymentMethodId.value
+          : this.paymentMethodId,
+      installmentPlanId: data.installmentPlanId.present
+          ? data.installmentPlanId.value
+          : this.installmentPlanId,
+      installmentNumber: data.installmentNumber.present
+          ? data.installmentNumber.value
+          : this.installmentNumber,
+      fundedByGoalId: data.fundedByGoalId.present
+          ? data.fundedByGoalId.value
+          : this.fundedByGoalId,
+      worthIt: data.worthIt.present ? data.worthIt.value : this.worthIt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Transaction(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('amount: $amount, ')
+          ..write('date: $date, ')
+          ..write('note: $note, ')
+          ..write('isRecurring: $isRecurring, ')
+          ..write('recurringTemplateId: $recurringTemplateId, ')
+          ..write('paymentMethodId: $paymentMethodId, ')
+          ..write('installmentPlanId: $installmentPlanId, ')
+          ..write('installmentNumber: $installmentNumber, ')
+          ..write('fundedByGoalId: $fundedByGoalId, ')
+          ..write('worthIt: $worthIt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      categoryId,
+      amount,
+      date,
+      note,
+      isRecurring,
+      recurringTemplateId,
+      paymentMethodId,
+      installmentPlanId,
+      installmentNumber,
+      fundedByGoalId,
+      worthIt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Transaction &&
+          other.id == this.id &&
+          other.categoryId == this.categoryId &&
+          other.amount == this.amount &&
+          other.date == this.date &&
+          other.note == this.note &&
+          other.isRecurring == this.isRecurring &&
+          other.recurringTemplateId == this.recurringTemplateId &&
+          other.paymentMethodId == this.paymentMethodId &&
+          other.installmentPlanId == this.installmentPlanId &&
+          other.installmentNumber == this.installmentNumber &&
+          other.fundedByGoalId == this.fundedByGoalId &&
+          other.worthIt == this.worthIt);
+}
+
+class TransactionsCompanion extends UpdateCompanion<Transaction> {
+  final Value<int> id;
+  final Value<String> categoryId;
+  final Value<int> amount;
+  final Value<DateTime> date;
+  final Value<String> note;
+  final Value<bool> isRecurring;
+  final Value<int?> recurringTemplateId;
+  final Value<int?> paymentMethodId;
+  final Value<int?> installmentPlanId;
+  final Value<int?> installmentNumber;
+  final Value<int?> fundedByGoalId;
+  final Value<bool?> worthIt;
+  const TransactionsCompanion({
+    this.id = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.date = const Value.absent(),
+    this.note = const Value.absent(),
+    this.isRecurring = const Value.absent(),
+    this.recurringTemplateId = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
+    this.installmentPlanId = const Value.absent(),
+    this.installmentNumber = const Value.absent(),
+    this.fundedByGoalId = const Value.absent(),
+    this.worthIt = const Value.absent(),
+  });
+  TransactionsCompanion.insert({
+    this.id = const Value.absent(),
+    required String categoryId,
+    required int amount,
+    required DateTime date,
+    this.note = const Value.absent(),
+    this.isRecurring = const Value.absent(),
+    this.recurringTemplateId = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
+    this.installmentPlanId = const Value.absent(),
+    this.installmentNumber = const Value.absent(),
+    this.fundedByGoalId = const Value.absent(),
+    this.worthIt = const Value.absent(),
+  })  : categoryId = Value(categoryId),
+        amount = Value(amount),
+        date = Value(date);
+  static Insertable<Transaction> custom({
+    Expression<int>? id,
+    Expression<String>? categoryId,
+    Expression<int>? amount,
+    Expression<DateTime>? date,
+    Expression<String>? note,
+    Expression<bool>? isRecurring,
+    Expression<int>? recurringTemplateId,
+    Expression<int>? paymentMethodId,
+    Expression<int>? installmentPlanId,
+    Expression<int>? installmentNumber,
+    Expression<int>? fundedByGoalId,
+    Expression<bool>? worthIt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (categoryId != null) 'category_id': categoryId,
+      if (amount != null) 'amount': amount,
+      if (date != null) 'date': date,
+      if (note != null) 'note': note,
+      if (isRecurring != null) 'is_recurring': isRecurring,
+      if (recurringTemplateId != null)
+        'recurring_template_id': recurringTemplateId,
+      if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
+      if (installmentPlanId != null) 'installment_plan_id': installmentPlanId,
+      if (installmentNumber != null) 'installment_number': installmentNumber,
+      if (fundedByGoalId != null) 'funded_by_goal_id': fundedByGoalId,
+      if (worthIt != null) 'worth_it': worthIt,
+    });
+  }
+
+  TransactionsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? categoryId,
+      Value<int>? amount,
+      Value<DateTime>? date,
+      Value<String>? note,
+      Value<bool>? isRecurring,
+      Value<int?>? recurringTemplateId,
+      Value<int?>? paymentMethodId,
+      Value<int?>? installmentPlanId,
+      Value<int?>? installmentNumber,
+      Value<int?>? fundedByGoalId,
+      Value<bool?>? worthIt}) {
+    return TransactionsCompanion(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      note: note ?? this.note,
+      isRecurring: isRecurring ?? this.isRecurring,
+      recurringTemplateId: recurringTemplateId ?? this.recurringTemplateId,
+      paymentMethodId: paymentMethodId ?? this.paymentMethodId,
+      installmentPlanId: installmentPlanId ?? this.installmentPlanId,
+      installmentNumber: installmentNumber ?? this.installmentNumber,
+      fundedByGoalId: fundedByGoalId ?? this.fundedByGoalId,
+      worthIt: worthIt ?? this.worthIt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (isRecurring.present) {
+      map['is_recurring'] = Variable<bool>(isRecurring.value);
+    }
+    if (recurringTemplateId.present) {
+      map['recurring_template_id'] = Variable<int>(recurringTemplateId.value);
+    }
+    if (paymentMethodId.present) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId.value);
+    }
+    if (installmentPlanId.present) {
+      map['installment_plan_id'] = Variable<int>(installmentPlanId.value);
+    }
+    if (installmentNumber.present) {
+      map['installment_number'] = Variable<int>(installmentNumber.value);
+    }
+    if (fundedByGoalId.present) {
+      map['funded_by_goal_id'] = Variable<int>(fundedByGoalId.value);
+    }
+    if (worthIt.present) {
+      map['worth_it'] = Variable<bool>(worthIt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionsCompanion(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('amount: $amount, ')
+          ..write('date: $date, ')
+          ..write('note: $note, ')
+          ..write('isRecurring: $isRecurring, ')
+          ..write('recurringTemplateId: $recurringTemplateId, ')
+          ..write('paymentMethodId: $paymentMethodId, ')
+          ..write('installmentPlanId: $installmentPlanId, ')
+          ..write('installmentNumber: $installmentNumber, ')
+          ..write('fundedByGoalId: $fundedByGoalId, ')
+          ..write('worthIt: $worthIt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AppSettingsTable extends AppSettings
+    with TableInfo<$AppSettingsTable, AppSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+      'key', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+      'value', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [key, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_settings';
+  @override
+  VerificationContext validateIntegrity(Insertable<AppSetting> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+          _keyMeta, key.isAcceptableOrUnknown(data['key']!, _keyMeta));
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+          _valueMeta, value.isAcceptableOrUnknown(data['value']!, _valueMeta));
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  AppSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppSetting(
+      key: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
+      value: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}value'])!,
+    );
+  }
+
+  @override
+  $AppSettingsTable createAlias(String alias) {
+    return $AppSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class AppSetting extends DataClass implements Insertable<AppSetting> {
+  final String key;
+  final String value;
+  const AppSetting({required this.key, required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  AppSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AppSettingsCompanion(
+      key: Value(key),
+      value: Value(value),
+    );
+  }
+
+  factory AppSetting.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppSetting(
+      key: serializer.fromJson<String>(json['key']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  AppSetting copyWith({String? key, String? value}) => AppSetting(
+        key: key ?? this.key,
+        value: value ?? this.value,
+      );
+  AppSetting copyWithCompanion(AppSettingsCompanion data) {
+    return AppSetting(
+      key: data.key.present ? data.key.value : this.key,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSetting(')
+          ..write('key: $key, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppSetting &&
+          other.key == this.key &&
+          other.value == this.value);
+}
+
+class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
+  final Value<String> key;
+  final Value<String> value;
+  final Value<int> rowid;
+  const AppSettingsCompanion({
+    this.key = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AppSettingsCompanion.insert({
+    required String key,
+    required String value,
+    this.rowid = const Value.absent(),
+  })  : key = Value(key),
+        value = Value(value);
+  static Insertable<AppSetting> custom({
+    Expression<String>? key,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AppSettingsCompanion copyWith(
+      {Value<String>? key, Value<String>? value, Value<int>? rowid}) {
+    return AppSettingsCompanion(
+      key: key ?? this.key,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingsCompanion(')
+          ..write('key: $key, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
           ..write(')'))
         .toString();
   }
@@ -4116,20 +4481,304 @@ class MonthlyAdjustmentsCompanion extends UpdateCompanion<MonthlyAdjustment> {
   }
 }
 
+class $HabitualOccurrencesTable extends HabitualOccurrences
+    with TableInfo<$HabitualOccurrencesTable, HabitualOccurrence> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HabitualOccurrencesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _templateIdMeta =
+      const VerificationMeta('templateId');
+  @override
+  late final GeneratedColumn<int> templateId = GeneratedColumn<int>(
+      'template_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _transactionIdMeta =
+      const VerificationMeta('transactionId');
+  @override
+  late final GeneratedColumn<int> transactionId = GeneratedColumn<int>(
+      'transaction_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [templateId, date, status, transactionId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'habitual_occurrences';
+  @override
+  VerificationContext validateIntegrity(Insertable<HabitualOccurrence> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('template_id')) {
+      context.handle(
+          _templateIdMeta,
+          templateId.isAcceptableOrUnknown(
+              data['template_id']!, _templateIdMeta));
+    } else if (isInserting) {
+      context.missing(_templateIdMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('transaction_id')) {
+      context.handle(
+          _transactionIdMeta,
+          transactionId.isAcceptableOrUnknown(
+              data['transaction_id']!, _transactionIdMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {templateId, date};
+  @override
+  HabitualOccurrence map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HabitualOccurrence(
+      templateId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}template_id'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      transactionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}transaction_id']),
+    );
+  }
+
+  @override
+  $HabitualOccurrencesTable createAlias(String alias) {
+    return $HabitualOccurrencesTable(attachedDatabase, alias);
+  }
+}
+
+class HabitualOccurrence extends DataClass
+    implements Insertable<HabitualOccurrence> {
+  final int templateId;
+  final DateTime date;
+
+  /// 'registered' o 'skipped' ("Hoy no").
+  final String status;
+  final int? transactionId;
+  const HabitualOccurrence(
+      {required this.templateId,
+      required this.date,
+      required this.status,
+      this.transactionId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['template_id'] = Variable<int>(templateId);
+    map['date'] = Variable<DateTime>(date);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || transactionId != null) {
+      map['transaction_id'] = Variable<int>(transactionId);
+    }
+    return map;
+  }
+
+  HabitualOccurrencesCompanion toCompanion(bool nullToAbsent) {
+    return HabitualOccurrencesCompanion(
+      templateId: Value(templateId),
+      date: Value(date),
+      status: Value(status),
+      transactionId: transactionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionId),
+    );
+  }
+
+  factory HabitualOccurrence.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HabitualOccurrence(
+      templateId: serializer.fromJson<int>(json['templateId']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      status: serializer.fromJson<String>(json['status']),
+      transactionId: serializer.fromJson<int?>(json['transactionId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'templateId': serializer.toJson<int>(templateId),
+      'date': serializer.toJson<DateTime>(date),
+      'status': serializer.toJson<String>(status),
+      'transactionId': serializer.toJson<int?>(transactionId),
+    };
+  }
+
+  HabitualOccurrence copyWith(
+          {int? templateId,
+          DateTime? date,
+          String? status,
+          Value<int?> transactionId = const Value.absent()}) =>
+      HabitualOccurrence(
+        templateId: templateId ?? this.templateId,
+        date: date ?? this.date,
+        status: status ?? this.status,
+        transactionId:
+            transactionId.present ? transactionId.value : this.transactionId,
+      );
+  HabitualOccurrence copyWithCompanion(HabitualOccurrencesCompanion data) {
+    return HabitualOccurrence(
+      templateId:
+          data.templateId.present ? data.templateId.value : this.templateId,
+      date: data.date.present ? data.date.value : this.date,
+      status: data.status.present ? data.status.value : this.status,
+      transactionId: data.transactionId.present
+          ? data.transactionId.value
+          : this.transactionId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HabitualOccurrence(')
+          ..write('templateId: $templateId, ')
+          ..write('date: $date, ')
+          ..write('status: $status, ')
+          ..write('transactionId: $transactionId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(templateId, date, status, transactionId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HabitualOccurrence &&
+          other.templateId == this.templateId &&
+          other.date == this.date &&
+          other.status == this.status &&
+          other.transactionId == this.transactionId);
+}
+
+class HabitualOccurrencesCompanion extends UpdateCompanion<HabitualOccurrence> {
+  final Value<int> templateId;
+  final Value<DateTime> date;
+  final Value<String> status;
+  final Value<int?> transactionId;
+  final Value<int> rowid;
+  const HabitualOccurrencesCompanion({
+    this.templateId = const Value.absent(),
+    this.date = const Value.absent(),
+    this.status = const Value.absent(),
+    this.transactionId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HabitualOccurrencesCompanion.insert({
+    required int templateId,
+    required DateTime date,
+    required String status,
+    this.transactionId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : templateId = Value(templateId),
+        date = Value(date),
+        status = Value(status);
+  static Insertable<HabitualOccurrence> custom({
+    Expression<int>? templateId,
+    Expression<DateTime>? date,
+    Expression<String>? status,
+    Expression<int>? transactionId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (templateId != null) 'template_id': templateId,
+      if (date != null) 'date': date,
+      if (status != null) 'status': status,
+      if (transactionId != null) 'transaction_id': transactionId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HabitualOccurrencesCompanion copyWith(
+      {Value<int>? templateId,
+      Value<DateTime>? date,
+      Value<String>? status,
+      Value<int?>? transactionId,
+      Value<int>? rowid}) {
+    return HabitualOccurrencesCompanion(
+      templateId: templateId ?? this.templateId,
+      date: date ?? this.date,
+      status: status ?? this.status,
+      transactionId: transactionId ?? this.transactionId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (templateId.present) {
+      map['template_id'] = Variable<int>(templateId.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (transactionId.present) {
+      map['transaction_id'] = Variable<int>(transactionId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HabitualOccurrencesCompanion(')
+          ..write('templateId: $templateId, ')
+          ..write('date: $date, ')
+          ..write('status: $status, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
   late final $CategoryBudgetsTable categoryBudgets =
       $CategoryBudgetsTable(this);
+  late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $RecurringTemplatesTable recurringTemplates =
       $RecurringTemplatesTable(this);
-  late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $InstallmentPlansTable installmentPlans =
       $InstallmentPlansTable(this);
+  late final $SavingsGoalsTable savingsGoals = $SavingsGoalsTable(this);
   late final $TransactionsTable transactions = $TransactionsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
-  late final $SavingsGoalsTable savingsGoals = $SavingsGoalsTable(this);
   late final $SavingsContributionsTable savingsContributions =
       $SavingsContributionsTable(this);
   late final $SavingsQuickAddsTable savingsQuickAdds =
@@ -4139,6 +4788,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $QuickExpenseTemplatesTable(this);
   late final $MonthlyAdjustmentsTable monthlyAdjustments =
       $MonthlyAdjustmentsTable(this);
+  late final $HabitualOccurrencesTable habitualOccurrences =
+      $HabitualOccurrencesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4146,17 +4797,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
         categories,
         categoryBudgets,
-        recurringTemplates,
         paymentMethods,
+        recurringTemplates,
         installmentPlans,
+        savingsGoals,
         transactions,
         appSettings,
-        savingsGoals,
         savingsContributions,
         savingsQuickAdds,
         monthlyBudgets,
         quickExpenseTemplates,
-        monthlyAdjustments
+        monthlyAdjustments,
+        habitualOccurrences
       ];
 }
 
@@ -4165,6 +4817,7 @@ typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
   required String name,
   required int colorValue,
   Value<String> iconKey,
+  Value<bool> archived,
   Value<int> rowid,
 });
 typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
@@ -4172,6 +4825,7 @@ typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
   Value<String> name,
   Value<int> colorValue,
   Value<String> iconKey,
+  Value<bool> archived,
   Value<int> rowid,
 });
 
@@ -4195,6 +4849,9 @@ class $$CategoriesTableFilterComposer
 
   ColumnFilters<String> get iconKey => $composableBuilder(
       column: $table.iconKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get archived => $composableBuilder(
+      column: $table.archived, builder: (column) => ColumnFilters(column));
 }
 
 class $$CategoriesTableOrderingComposer
@@ -4217,6 +4874,9 @@ class $$CategoriesTableOrderingComposer
 
   ColumnOrderings<String> get iconKey => $composableBuilder(
       column: $table.iconKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get archived => $composableBuilder(
+      column: $table.archived, builder: (column) => ColumnOrderings(column));
 }
 
 class $$CategoriesTableAnnotationComposer
@@ -4239,6 +4899,9 @@ class $$CategoriesTableAnnotationComposer
 
   GeneratedColumn<String> get iconKey =>
       $composableBuilder(column: $table.iconKey, builder: (column) => column);
+
+  GeneratedColumn<bool> get archived =>
+      $composableBuilder(column: $table.archived, builder: (column) => column);
 }
 
 class $$CategoriesTableTableManager extends RootTableManager<
@@ -4268,6 +4931,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<int> colorValue = const Value.absent(),
             Value<String> iconKey = const Value.absent(),
+            Value<bool> archived = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CategoriesCompanion(
@@ -4275,6 +4939,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             name: name,
             colorValue: colorValue,
             iconKey: iconKey,
+            archived: archived,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -4282,6 +4947,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             required String name,
             required int colorValue,
             Value<String> iconKey = const Value.absent(),
+            Value<bool> archived = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               CategoriesCompanion.insert(
@@ -4289,6 +4955,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             name: name,
             colorValue: colorValue,
             iconKey: iconKey,
+            archived: archived,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -4468,207 +5135,6 @@ typedef $$CategoryBudgetsTableProcessedTableManager = ProcessedTableManager<
       BaseReferences<_$AppDatabase, $CategoryBudgetsTable, CategoryBudget>
     ),
     CategoryBudget,
-    PrefetchHooks Function()>;
-typedef $$RecurringTemplatesTableCreateCompanionBuilder
-    = RecurringTemplatesCompanion Function({
-  Value<int> id,
-  required String categoryId,
-  required int amount,
-  Value<String> note,
-  required int dayOfMonth,
-  Value<bool> active,
-  required int lastGeneratedYearMonth,
-});
-typedef $$RecurringTemplatesTableUpdateCompanionBuilder
-    = RecurringTemplatesCompanion Function({
-  Value<int> id,
-  Value<String> categoryId,
-  Value<int> amount,
-  Value<String> note,
-  Value<int> dayOfMonth,
-  Value<bool> active,
-  Value<int> lastGeneratedYearMonth,
-});
-
-class $$RecurringTemplatesTableFilterComposer
-    extends Composer<_$AppDatabase, $RecurringTemplatesTable> {
-  $$RecurringTemplatesTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get categoryId => $composableBuilder(
-      column: $table.categoryId, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get amount => $composableBuilder(
-      column: $table.amount, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get note => $composableBuilder(
-      column: $table.note, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get dayOfMonth => $composableBuilder(
-      column: $table.dayOfMonth, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<bool> get active => $composableBuilder(
-      column: $table.active, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get lastGeneratedYearMonth => $composableBuilder(
-      column: $table.lastGeneratedYearMonth,
-      builder: (column) => ColumnFilters(column));
-}
-
-class $$RecurringTemplatesTableOrderingComposer
-    extends Composer<_$AppDatabase, $RecurringTemplatesTable> {
-  $$RecurringTemplatesTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get categoryId => $composableBuilder(
-      column: $table.categoryId, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<int> get amount => $composableBuilder(
-      column: $table.amount, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get note => $composableBuilder(
-      column: $table.note, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<int> get dayOfMonth => $composableBuilder(
-      column: $table.dayOfMonth, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<bool> get active => $composableBuilder(
-      column: $table.active, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<int> get lastGeneratedYearMonth => $composableBuilder(
-      column: $table.lastGeneratedYearMonth,
-      builder: (column) => ColumnOrderings(column));
-}
-
-class $$RecurringTemplatesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $RecurringTemplatesTable> {
-  $$RecurringTemplatesTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<int> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get categoryId => $composableBuilder(
-      column: $table.categoryId, builder: (column) => column);
-
-  GeneratedColumn<int> get amount =>
-      $composableBuilder(column: $table.amount, builder: (column) => column);
-
-  GeneratedColumn<String> get note =>
-      $composableBuilder(column: $table.note, builder: (column) => column);
-
-  GeneratedColumn<int> get dayOfMonth => $composableBuilder(
-      column: $table.dayOfMonth, builder: (column) => column);
-
-  GeneratedColumn<bool> get active =>
-      $composableBuilder(column: $table.active, builder: (column) => column);
-
-  GeneratedColumn<int> get lastGeneratedYearMonth => $composableBuilder(
-      column: $table.lastGeneratedYearMonth, builder: (column) => column);
-}
-
-class $$RecurringTemplatesTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $RecurringTemplatesTable,
-    RecurringTemplate,
-    $$RecurringTemplatesTableFilterComposer,
-    $$RecurringTemplatesTableOrderingComposer,
-    $$RecurringTemplatesTableAnnotationComposer,
-    $$RecurringTemplatesTableCreateCompanionBuilder,
-    $$RecurringTemplatesTableUpdateCompanionBuilder,
-    (
-      RecurringTemplate,
-      BaseReferences<_$AppDatabase, $RecurringTemplatesTable, RecurringTemplate>
-    ),
-    RecurringTemplate,
-    PrefetchHooks Function()> {
-  $$RecurringTemplatesTableTableManager(
-      _$AppDatabase db, $RecurringTemplatesTable table)
-      : super(TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$RecurringTemplatesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$RecurringTemplatesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$RecurringTemplatesTableAnnotationComposer(
-                  $db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> categoryId = const Value.absent(),
-            Value<int> amount = const Value.absent(),
-            Value<String> note = const Value.absent(),
-            Value<int> dayOfMonth = const Value.absent(),
-            Value<bool> active = const Value.absent(),
-            Value<int> lastGeneratedYearMonth = const Value.absent(),
-          }) =>
-              RecurringTemplatesCompanion(
-            id: id,
-            categoryId: categoryId,
-            amount: amount,
-            note: note,
-            dayOfMonth: dayOfMonth,
-            active: active,
-            lastGeneratedYearMonth: lastGeneratedYearMonth,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String categoryId,
-            required int amount,
-            Value<String> note = const Value.absent(),
-            required int dayOfMonth,
-            Value<bool> active = const Value.absent(),
-            required int lastGeneratedYearMonth,
-          }) =>
-              RecurringTemplatesCompanion.insert(
-            id: id,
-            categoryId: categoryId,
-            amount: amount,
-            note: note,
-            dayOfMonth: dayOfMonth,
-            active: active,
-            lastGeneratedYearMonth: lastGeneratedYearMonth,
-          ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ));
-}
-
-typedef $$RecurringTemplatesTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $RecurringTemplatesTable,
-    RecurringTemplate,
-    $$RecurringTemplatesTableFilterComposer,
-    $$RecurringTemplatesTableOrderingComposer,
-    $$RecurringTemplatesTableAnnotationComposer,
-    $$RecurringTemplatesTableCreateCompanionBuilder,
-    $$RecurringTemplatesTableUpdateCompanionBuilder,
-    (
-      RecurringTemplate,
-      BaseReferences<_$AppDatabase, $RecurringTemplatesTable, RecurringTemplate>
-    ),
-    RecurringTemplate,
     PrefetchHooks Function()>;
 typedef $$PaymentMethodsTableCreateCompanionBuilder = PaymentMethodsCompanion
     Function({
@@ -4867,6 +5333,285 @@ typedef $$PaymentMethodsTableProcessedTableManager = ProcessedTableManager<
       BaseReferences<_$AppDatabase, $PaymentMethodsTable, PaymentMethod>
     ),
     PaymentMethod,
+    PrefetchHooks Function()>;
+typedef $$RecurringTemplatesTableCreateCompanionBuilder
+    = RecurringTemplatesCompanion Function({
+  Value<int> id,
+  required String categoryId,
+  required int amount,
+  Value<String> note,
+  required int dayOfMonth,
+  Value<bool> active,
+  required int lastGeneratedYearMonth,
+  Value<String> mode,
+  Value<int?> weekdays,
+  Value<String?> reminderTime,
+  Value<int?> paymentMethodId,
+  Value<DateTime?> startDate,
+});
+typedef $$RecurringTemplatesTableUpdateCompanionBuilder
+    = RecurringTemplatesCompanion Function({
+  Value<int> id,
+  Value<String> categoryId,
+  Value<int> amount,
+  Value<String> note,
+  Value<int> dayOfMonth,
+  Value<bool> active,
+  Value<int> lastGeneratedYearMonth,
+  Value<String> mode,
+  Value<int?> weekdays,
+  Value<String?> reminderTime,
+  Value<int?> paymentMethodId,
+  Value<DateTime?> startDate,
+});
+
+class $$RecurringTemplatesTableFilterComposer
+    extends Composer<_$AppDatabase, $RecurringTemplatesTable> {
+  $$RecurringTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get categoryId => $composableBuilder(
+      column: $table.categoryId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get amount => $composableBuilder(
+      column: $table.amount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get dayOfMonth => $composableBuilder(
+      column: $table.dayOfMonth, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get active => $composableBuilder(
+      column: $table.active, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastGeneratedYearMonth => $composableBuilder(
+      column: $table.lastGeneratedYearMonth,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get weekdays => $composableBuilder(
+      column: $table.weekdays, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get reminderTime => $composableBuilder(
+      column: $table.reminderTime, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get paymentMethodId => $composableBuilder(
+      column: $table.paymentMethodId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startDate => $composableBuilder(
+      column: $table.startDate, builder: (column) => ColumnFilters(column));
+}
+
+class $$RecurringTemplatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $RecurringTemplatesTable> {
+  $$RecurringTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get categoryId => $composableBuilder(
+      column: $table.categoryId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+      column: $table.amount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get note => $composableBuilder(
+      column: $table.note, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get dayOfMonth => $composableBuilder(
+      column: $table.dayOfMonth, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get active => $composableBuilder(
+      column: $table.active, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lastGeneratedYearMonth => $composableBuilder(
+      column: $table.lastGeneratedYearMonth,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get weekdays => $composableBuilder(
+      column: $table.weekdays, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get reminderTime => $composableBuilder(
+      column: $table.reminderTime,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get paymentMethodId => $composableBuilder(
+      column: $table.paymentMethodId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startDate => $composableBuilder(
+      column: $table.startDate, builder: (column) => ColumnOrderings(column));
+}
+
+class $$RecurringTemplatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RecurringTemplatesTable> {
+  $$RecurringTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get categoryId => $composableBuilder(
+      column: $table.categoryId, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<int> get dayOfMonth => $composableBuilder(
+      column: $table.dayOfMonth, builder: (column) => column);
+
+  GeneratedColumn<bool> get active =>
+      $composableBuilder(column: $table.active, builder: (column) => column);
+
+  GeneratedColumn<int> get lastGeneratedYearMonth => $composableBuilder(
+      column: $table.lastGeneratedYearMonth, builder: (column) => column);
+
+  GeneratedColumn<String> get mode =>
+      $composableBuilder(column: $table.mode, builder: (column) => column);
+
+  GeneratedColumn<int> get weekdays =>
+      $composableBuilder(column: $table.weekdays, builder: (column) => column);
+
+  GeneratedColumn<String> get reminderTime => $composableBuilder(
+      column: $table.reminderTime, builder: (column) => column);
+
+  GeneratedColumn<int> get paymentMethodId => $composableBuilder(
+      column: $table.paymentMethodId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startDate =>
+      $composableBuilder(column: $table.startDate, builder: (column) => column);
+}
+
+class $$RecurringTemplatesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $RecurringTemplatesTable,
+    RecurringTemplate,
+    $$RecurringTemplatesTableFilterComposer,
+    $$RecurringTemplatesTableOrderingComposer,
+    $$RecurringTemplatesTableAnnotationComposer,
+    $$RecurringTemplatesTableCreateCompanionBuilder,
+    $$RecurringTemplatesTableUpdateCompanionBuilder,
+    (
+      RecurringTemplate,
+      BaseReferences<_$AppDatabase, $RecurringTemplatesTable, RecurringTemplate>
+    ),
+    RecurringTemplate,
+    PrefetchHooks Function()> {
+  $$RecurringTemplatesTableTableManager(
+      _$AppDatabase db, $RecurringTemplatesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RecurringTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RecurringTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RecurringTemplatesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> categoryId = const Value.absent(),
+            Value<int> amount = const Value.absent(),
+            Value<String> note = const Value.absent(),
+            Value<int> dayOfMonth = const Value.absent(),
+            Value<bool> active = const Value.absent(),
+            Value<int> lastGeneratedYearMonth = const Value.absent(),
+            Value<String> mode = const Value.absent(),
+            Value<int?> weekdays = const Value.absent(),
+            Value<String?> reminderTime = const Value.absent(),
+            Value<int?> paymentMethodId = const Value.absent(),
+            Value<DateTime?> startDate = const Value.absent(),
+          }) =>
+              RecurringTemplatesCompanion(
+            id: id,
+            categoryId: categoryId,
+            amount: amount,
+            note: note,
+            dayOfMonth: dayOfMonth,
+            active: active,
+            lastGeneratedYearMonth: lastGeneratedYearMonth,
+            mode: mode,
+            weekdays: weekdays,
+            reminderTime: reminderTime,
+            paymentMethodId: paymentMethodId,
+            startDate: startDate,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String categoryId,
+            required int amount,
+            Value<String> note = const Value.absent(),
+            required int dayOfMonth,
+            Value<bool> active = const Value.absent(),
+            required int lastGeneratedYearMonth,
+            Value<String> mode = const Value.absent(),
+            Value<int?> weekdays = const Value.absent(),
+            Value<String?> reminderTime = const Value.absent(),
+            Value<int?> paymentMethodId = const Value.absent(),
+            Value<DateTime?> startDate = const Value.absent(),
+          }) =>
+              RecurringTemplatesCompanion.insert(
+            id: id,
+            categoryId: categoryId,
+            amount: amount,
+            note: note,
+            dayOfMonth: dayOfMonth,
+            active: active,
+            lastGeneratedYearMonth: lastGeneratedYearMonth,
+            mode: mode,
+            weekdays: weekdays,
+            reminderTime: reminderTime,
+            paymentMethodId: paymentMethodId,
+            startDate: startDate,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$RecurringTemplatesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $RecurringTemplatesTable,
+    RecurringTemplate,
+    $$RecurringTemplatesTableFilterComposer,
+    $$RecurringTemplatesTableOrderingComposer,
+    $$RecurringTemplatesTableAnnotationComposer,
+    $$RecurringTemplatesTableCreateCompanionBuilder,
+    $$RecurringTemplatesTableUpdateCompanionBuilder,
+    (
+      RecurringTemplate,
+      BaseReferences<_$AppDatabase, $RecurringTemplatesTable, RecurringTemplate>
+    ),
+    RecurringTemplate,
     PrefetchHooks Function()>;
 typedef $$InstallmentPlansTableCreateCompanionBuilder
     = InstallmentPlansCompanion Function({
@@ -5086,6 +5831,144 @@ typedef $$InstallmentPlansTableProcessedTableManager = ProcessedTableManager<
     ),
     InstallmentPlan,
     PrefetchHooks Function()>;
+typedef $$SavingsGoalsTableCreateCompanionBuilder = SavingsGoalsCompanion
+    Function({
+  Value<int> id,
+  required String name,
+  required int targetAmount,
+});
+typedef $$SavingsGoalsTableUpdateCompanionBuilder = SavingsGoalsCompanion
+    Function({
+  Value<int> id,
+  Value<String> name,
+  Value<int> targetAmount,
+});
+
+class $$SavingsGoalsTableFilterComposer
+    extends Composer<_$AppDatabase, $SavingsGoalsTable> {
+  $$SavingsGoalsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get targetAmount => $composableBuilder(
+      column: $table.targetAmount, builder: (column) => ColumnFilters(column));
+}
+
+class $$SavingsGoalsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavingsGoalsTable> {
+  $$SavingsGoalsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get targetAmount => $composableBuilder(
+      column: $table.targetAmount,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$SavingsGoalsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavingsGoalsTable> {
+  $$SavingsGoalsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get targetAmount => $composableBuilder(
+      column: $table.targetAmount, builder: (column) => column);
+}
+
+class $$SavingsGoalsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $SavingsGoalsTable,
+    SavingsGoal,
+    $$SavingsGoalsTableFilterComposer,
+    $$SavingsGoalsTableOrderingComposer,
+    $$SavingsGoalsTableAnnotationComposer,
+    $$SavingsGoalsTableCreateCompanionBuilder,
+    $$SavingsGoalsTableUpdateCompanionBuilder,
+    (
+      SavingsGoal,
+      BaseReferences<_$AppDatabase, $SavingsGoalsTable, SavingsGoal>
+    ),
+    SavingsGoal,
+    PrefetchHooks Function()> {
+  $$SavingsGoalsTableTableManager(_$AppDatabase db, $SavingsGoalsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavingsGoalsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SavingsGoalsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SavingsGoalsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<int> targetAmount = const Value.absent(),
+          }) =>
+              SavingsGoalsCompanion(
+            id: id,
+            name: name,
+            targetAmount: targetAmount,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String name,
+            required int targetAmount,
+          }) =>
+              SavingsGoalsCompanion.insert(
+            id: id,
+            name: name,
+            targetAmount: targetAmount,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$SavingsGoalsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $SavingsGoalsTable,
+    SavingsGoal,
+    $$SavingsGoalsTableFilterComposer,
+    $$SavingsGoalsTableOrderingComposer,
+    $$SavingsGoalsTableAnnotationComposer,
+    $$SavingsGoalsTableCreateCompanionBuilder,
+    $$SavingsGoalsTableUpdateCompanionBuilder,
+    (
+      SavingsGoal,
+      BaseReferences<_$AppDatabase, $SavingsGoalsTable, SavingsGoal>
+    ),
+    SavingsGoal,
+    PrefetchHooks Function()>;
 typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
     Function({
   Value<int> id,
@@ -5098,6 +5981,8 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   Value<int?> paymentMethodId,
   Value<int?> installmentPlanId,
   Value<int?> installmentNumber,
+  Value<int?> fundedByGoalId,
+  Value<bool?> worthIt,
 });
 typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
     Function({
@@ -5111,6 +5996,8 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<int?> paymentMethodId,
   Value<int?> installmentPlanId,
   Value<int?> installmentNumber,
+  Value<int?> fundedByGoalId,
+  Value<bool?> worthIt,
 });
 
 class $$TransactionsTableFilterComposer
@@ -5155,6 +6042,13 @@ class $$TransactionsTableFilterComposer
   ColumnFilters<int> get installmentNumber => $composableBuilder(
       column: $table.installmentNumber,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get fundedByGoalId => $composableBuilder(
+      column: $table.fundedByGoalId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get worthIt => $composableBuilder(
+      column: $table.worthIt, builder: (column) => ColumnFilters(column));
 }
 
 class $$TransactionsTableOrderingComposer
@@ -5199,6 +6093,13 @@ class $$TransactionsTableOrderingComposer
   ColumnOrderings<int> get installmentNumber => $composableBuilder(
       column: $table.installmentNumber,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get fundedByGoalId => $composableBuilder(
+      column: $table.fundedByGoalId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get worthIt => $composableBuilder(
+      column: $table.worthIt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -5239,6 +6140,12 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<int> get installmentNumber => $composableBuilder(
       column: $table.installmentNumber, builder: (column) => column);
+
+  GeneratedColumn<int> get fundedByGoalId => $composableBuilder(
+      column: $table.fundedByGoalId, builder: (column) => column);
+
+  GeneratedColumn<bool> get worthIt =>
+      $composableBuilder(column: $table.worthIt, builder: (column) => column);
 }
 
 class $$TransactionsTableTableManager extends RootTableManager<
@@ -5277,6 +6184,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<int?> paymentMethodId = const Value.absent(),
             Value<int?> installmentPlanId = const Value.absent(),
             Value<int?> installmentNumber = const Value.absent(),
+            Value<int?> fundedByGoalId = const Value.absent(),
+            Value<bool?> worthIt = const Value.absent(),
           }) =>
               TransactionsCompanion(
             id: id,
@@ -5289,6 +6198,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             paymentMethodId: paymentMethodId,
             installmentPlanId: installmentPlanId,
             installmentNumber: installmentNumber,
+            fundedByGoalId: fundedByGoalId,
+            worthIt: worthIt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -5301,6 +6212,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<int?> paymentMethodId = const Value.absent(),
             Value<int?> installmentPlanId = const Value.absent(),
             Value<int?> installmentNumber = const Value.absent(),
+            Value<int?> fundedByGoalId = const Value.absent(),
+            Value<bool?> worthIt = const Value.absent(),
           }) =>
               TransactionsCompanion.insert(
             id: id,
@@ -5313,6 +6226,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             paymentMethodId: paymentMethodId,
             installmentPlanId: installmentPlanId,
             installmentNumber: installmentNumber,
+            fundedByGoalId: fundedByGoalId,
+            worthIt: worthIt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -5457,144 +6372,6 @@ typedef $$AppSettingsTableProcessedTableManager = ProcessedTableManager<
     $$AppSettingsTableUpdateCompanionBuilder,
     (AppSetting, BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>),
     AppSetting,
-    PrefetchHooks Function()>;
-typedef $$SavingsGoalsTableCreateCompanionBuilder = SavingsGoalsCompanion
-    Function({
-  Value<int> id,
-  required String name,
-  required int targetAmount,
-});
-typedef $$SavingsGoalsTableUpdateCompanionBuilder = SavingsGoalsCompanion
-    Function({
-  Value<int> id,
-  Value<String> name,
-  Value<int> targetAmount,
-});
-
-class $$SavingsGoalsTableFilterComposer
-    extends Composer<_$AppDatabase, $SavingsGoalsTable> {
-  $$SavingsGoalsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get targetAmount => $composableBuilder(
-      column: $table.targetAmount, builder: (column) => ColumnFilters(column));
-}
-
-class $$SavingsGoalsTableOrderingComposer
-    extends Composer<_$AppDatabase, $SavingsGoalsTable> {
-  $$SavingsGoalsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<int> get targetAmount => $composableBuilder(
-      column: $table.targetAmount,
-      builder: (column) => ColumnOrderings(column));
-}
-
-class $$SavingsGoalsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $SavingsGoalsTable> {
-  $$SavingsGoalsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<int> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get name =>
-      $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumn<int> get targetAmount => $composableBuilder(
-      column: $table.targetAmount, builder: (column) => column);
-}
-
-class $$SavingsGoalsTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $SavingsGoalsTable,
-    SavingsGoal,
-    $$SavingsGoalsTableFilterComposer,
-    $$SavingsGoalsTableOrderingComposer,
-    $$SavingsGoalsTableAnnotationComposer,
-    $$SavingsGoalsTableCreateCompanionBuilder,
-    $$SavingsGoalsTableUpdateCompanionBuilder,
-    (
-      SavingsGoal,
-      BaseReferences<_$AppDatabase, $SavingsGoalsTable, SavingsGoal>
-    ),
-    SavingsGoal,
-    PrefetchHooks Function()> {
-  $$SavingsGoalsTableTableManager(_$AppDatabase db, $SavingsGoalsTable table)
-      : super(TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$SavingsGoalsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$SavingsGoalsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$SavingsGoalsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> name = const Value.absent(),
-            Value<int> targetAmount = const Value.absent(),
-          }) =>
-              SavingsGoalsCompanion(
-            id: id,
-            name: name,
-            targetAmount: targetAmount,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String name,
-            required int targetAmount,
-          }) =>
-              SavingsGoalsCompanion.insert(
-            id: id,
-            name: name,
-            targetAmount: targetAmount,
-          ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ));
-}
-
-typedef $$SavingsGoalsTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $SavingsGoalsTable,
-    SavingsGoal,
-    $$SavingsGoalsTableFilterComposer,
-    $$SavingsGoalsTableOrderingComposer,
-    $$SavingsGoalsTableAnnotationComposer,
-    $$SavingsGoalsTableCreateCompanionBuilder,
-    $$SavingsGoalsTableUpdateCompanionBuilder,
-    (
-      SavingsGoal,
-      BaseReferences<_$AppDatabase, $SavingsGoalsTable, SavingsGoal>
-    ),
-    SavingsGoal,
     PrefetchHooks Function()>;
 typedef $$SavingsContributionsTableCreateCompanionBuilder
     = SavingsContributionsCompanion Function({
@@ -6424,6 +7201,170 @@ typedef $$MonthlyAdjustmentsTableProcessedTableManager = ProcessedTableManager<
     ),
     MonthlyAdjustment,
     PrefetchHooks Function()>;
+typedef $$HabitualOccurrencesTableCreateCompanionBuilder
+    = HabitualOccurrencesCompanion Function({
+  required int templateId,
+  required DateTime date,
+  required String status,
+  Value<int?> transactionId,
+  Value<int> rowid,
+});
+typedef $$HabitualOccurrencesTableUpdateCompanionBuilder
+    = HabitualOccurrencesCompanion Function({
+  Value<int> templateId,
+  Value<DateTime> date,
+  Value<String> status,
+  Value<int?> transactionId,
+  Value<int> rowid,
+});
+
+class $$HabitualOccurrencesTableFilterComposer
+    extends Composer<_$AppDatabase, $HabitualOccurrencesTable> {
+  $$HabitualOccurrencesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get templateId => $composableBuilder(
+      column: $table.templateId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get transactionId => $composableBuilder(
+      column: $table.transactionId, builder: (column) => ColumnFilters(column));
+}
+
+class $$HabitualOccurrencesTableOrderingComposer
+    extends Composer<_$AppDatabase, $HabitualOccurrencesTable> {
+  $$HabitualOccurrencesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get templateId => $composableBuilder(
+      column: $table.templateId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get transactionId => $composableBuilder(
+      column: $table.transactionId,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$HabitualOccurrencesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HabitualOccurrencesTable> {
+  $$HabitualOccurrencesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get templateId => $composableBuilder(
+      column: $table.templateId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get transactionId => $composableBuilder(
+      column: $table.transactionId, builder: (column) => column);
+}
+
+class $$HabitualOccurrencesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $HabitualOccurrencesTable,
+    HabitualOccurrence,
+    $$HabitualOccurrencesTableFilterComposer,
+    $$HabitualOccurrencesTableOrderingComposer,
+    $$HabitualOccurrencesTableAnnotationComposer,
+    $$HabitualOccurrencesTableCreateCompanionBuilder,
+    $$HabitualOccurrencesTableUpdateCompanionBuilder,
+    (
+      HabitualOccurrence,
+      BaseReferences<_$AppDatabase, $HabitualOccurrencesTable,
+          HabitualOccurrence>
+    ),
+    HabitualOccurrence,
+    PrefetchHooks Function()> {
+  $$HabitualOccurrencesTableTableManager(
+      _$AppDatabase db, $HabitualOccurrencesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HabitualOccurrencesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HabitualOccurrencesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HabitualOccurrencesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> templateId = const Value.absent(),
+            Value<DateTime> date = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int?> transactionId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              HabitualOccurrencesCompanion(
+            templateId: templateId,
+            date: date,
+            status: status,
+            transactionId: transactionId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required int templateId,
+            required DateTime date,
+            required String status,
+            Value<int?> transactionId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              HabitualOccurrencesCompanion.insert(
+            templateId: templateId,
+            date: date,
+            status: status,
+            transactionId: transactionId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$HabitualOccurrencesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $HabitualOccurrencesTable,
+    HabitualOccurrence,
+    $$HabitualOccurrencesTableFilterComposer,
+    $$HabitualOccurrencesTableOrderingComposer,
+    $$HabitualOccurrencesTableAnnotationComposer,
+    $$HabitualOccurrencesTableCreateCompanionBuilder,
+    $$HabitualOccurrencesTableUpdateCompanionBuilder,
+    (
+      HabitualOccurrence,
+      BaseReferences<_$AppDatabase, $HabitualOccurrencesTable,
+          HabitualOccurrence>
+    ),
+    HabitualOccurrence,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6432,18 +7373,18 @@ class $AppDatabaseManager {
       $$CategoriesTableTableManager(_db, _db.categories);
   $$CategoryBudgetsTableTableManager get categoryBudgets =>
       $$CategoryBudgetsTableTableManager(_db, _db.categoryBudgets);
-  $$RecurringTemplatesTableTableManager get recurringTemplates =>
-      $$RecurringTemplatesTableTableManager(_db, _db.recurringTemplates);
   $$PaymentMethodsTableTableManager get paymentMethods =>
       $$PaymentMethodsTableTableManager(_db, _db.paymentMethods);
+  $$RecurringTemplatesTableTableManager get recurringTemplates =>
+      $$RecurringTemplatesTableTableManager(_db, _db.recurringTemplates);
   $$InstallmentPlansTableTableManager get installmentPlans =>
       $$InstallmentPlansTableTableManager(_db, _db.installmentPlans);
+  $$SavingsGoalsTableTableManager get savingsGoals =>
+      $$SavingsGoalsTableTableManager(_db, _db.savingsGoals);
   $$TransactionsTableTableManager get transactions =>
       $$TransactionsTableTableManager(_db, _db.transactions);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
-  $$SavingsGoalsTableTableManager get savingsGoals =>
-      $$SavingsGoalsTableTableManager(_db, _db.savingsGoals);
   $$SavingsContributionsTableTableManager get savingsContributions =>
       $$SavingsContributionsTableTableManager(_db, _db.savingsContributions);
   $$SavingsQuickAddsTableTableManager get savingsQuickAdds =>
@@ -6454,4 +7395,6 @@ class $AppDatabaseManager {
       $$QuickExpenseTemplatesTableTableManager(_db, _db.quickExpenseTemplates);
   $$MonthlyAdjustmentsTableTableManager get monthlyAdjustments =>
       $$MonthlyAdjustmentsTableTableManager(_db, _db.monthlyAdjustments);
+  $$HabitualOccurrencesTableTableManager get habitualOccurrences =>
+      $$HabitualOccurrencesTableTableManager(_db, _db.habitualOccurrences);
 }

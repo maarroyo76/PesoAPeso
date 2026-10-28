@@ -16,7 +16,12 @@ import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import '../metodos_pago/payment_method_labels.dart';
+import 'habitual_pending_card.dart';
 import 'transaction_detail_sheet.dart';
+import '../../core/utils/weekly_review.dart';
+import '../revision/weekly_review_screen.dart';
+import '../agregar_gasto/agregar_screen.dart' show showRegisterSheet;
+import '../historial/historial_screen.dart';
 
 class ResumenScreen extends ConsumerStatefulWidget {
   const ResumenScreen({super.key});
@@ -103,8 +108,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     final totalBudget = ref.watch(monthTotalBudgetProvider(_month));
     final prevMonth = DateTime(_month.year, _month.month - 1);
     final prevTxAsync = ref.watch(monthTransactionsProvider(prevMonth));
-    final prevSpent =
-        prevTxAsync.valueOrNull?.fold<int>(0, (a, t) => a + t.amount);
+    final prevTx = prevTxAsync.valueOrNull;
+    final prevSpent = prevTx == null ? null : budgetSpent(prevTx);
     final saved = ref.watch(monthContributedProvider(_month)).valueOrNull ?? 0;
 
     return categoriesAsync.when(
@@ -130,7 +135,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     final methodsById =
         paymentMethodsById(ref.watch(paymentMethodsProvider).valueOrNull);
     final spentByCategory = <String, int>{};
-    for (final t in transactions) {
+    // RF52: lo pagado con ahorro no consume el presupuesto del mes.
+    for (final t in transactions.where(countsAgainstBudget)) {
       spentByCategory[t.categoryId] =
           (spentByCategory[t.categoryId] ?? 0) + t.amount;
     }
@@ -162,9 +168,15 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
             budget: totalBudget,
             prevSpent: prevSpent,
             today: _isCurrentMonth ? DateTime.now() : null,
+            fromSavings: transactions
+                .where((t) => !countsAgainstBudget(t))
+                .fold<int>(0, (a, t) => a + t.amount),
           ),
         ),
         SwipeHint(visible: _showHint == true),
+        // RF49: días de gastos habituales sin confirmar.
+        if (_isCurrentMonth) const HabitualPendingCard(),
+        if (_isCurrentMonth) ..._weeklyReview(transactions),
         const SizedBox(height: 24),
         const SectionLabel('Por categoría'),
         const SizedBox(height: 12),
@@ -175,12 +187,23 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
               onTap: () => _showDetail(c, transactions),
             )),
         const SizedBox(height: 24),
-        const SectionLabel('Últimos registros'),
-        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Expanded(child: SectionLabel('Últimos registros')),
+            // UX06: el historial completo, con búsqueda y filtros.
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistorialScreen()),
+              ),
+              child: const Text('Ver todo'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
         if (transactions.isEmpty && _isCurrentMonth)
           _EmptyMonthCard(
-            onAdd: () =>
-                ref.read(selectedTabProvider.notifier).state = kAgregarTabIndex,
+            onAdd: () => showRegisterSheet(context),
           )
         else if (transactions.isEmpty)
           Padding(
@@ -197,11 +220,75 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
                 tx: t,
                 paymentLabel: transactionPaymentLabel(t, methodsById),
                 category: categoriesById[t.categoryId]!,
-                onTap: () =>
-                    _showDetail(categoriesById[t.categoryId]!, transactions),
+                // UX06: cada gasto abre su propio detalle.
+                onTap: () => openTransactionDetail(context, t),
               )),
       ],
     );
+  }
+
+  /// RF37: una vez por semana, invitar a revisar los gastos de los últimos
+  /// 7 días. Se puede omitir.
+  List<Widget> _weeklyReview(List<Transaction> transactions) {
+    final last = ref.watch(settingProvider(kWeeklyReviewSettingKey));
+    if (!last.hasValue) return const [];
+    final prevMonth = DateTime(_month.year, _month.month - 1);
+    final now = DateTime.now();
+    final candidates = weeklyReviewCandidates([
+      ...ref.watch(monthTransactionsProvider(prevMonth)).valueOrNull ??
+          const <Transaction>[],
+      ...transactions,
+    ], now);
+    if (!weeklyReviewDue(
+        lastReview: last.value, today: now, candidates: candidates)) {
+      return const [];
+    }
+    return [
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.colors.paperDeep,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.colors.rule),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('¿Valió la pena?',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600, color: context.colors.ink)),
+            const SizedBox(height: 4),
+            Text(
+              candidates.length == 1
+                  ? 'Revisa tu gasto de esta semana.'
+                  : 'Revisa tus ${candidates.length} gastos de esta semana.',
+              style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: context.colors.ink),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const WeeklyReviewScreen()),
+                  ),
+                  child: const Text('Revisar'),
+                ),
+                TextButton(
+                  onPressed: () => markWeeklyReviewDone(ref),
+                  child: const Text('Omitir'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 
   void _showDetail(Category category, List<Transaction> allTransactions) {
@@ -351,9 +438,13 @@ class _TotalCard extends StatelessWidget {
     required this.budget,
     required this.prevSpent,
     required this.today,
+    this.fromSavings = 0,
   });
   final int spent;
   final int saved;
+
+  /// RF52: gastado con el ahorro de metas; no sale del presupuesto.
+  final int fromSavings;
   final int budget;
   final int? prevSpent;
 
@@ -428,6 +519,8 @@ class _TotalCard extends StatelessWidget {
                 children: [
                   _Figure(label: 'Gastado', amount: spent),
                   _Figure(label: 'Ahorrado', amount: saved),
+                  if (fromSavings > 0)
+                    _Figure(label: 'Pagado con ahorro', amount: fromSavings),
                   _Figure(
                     label: overBudget ? 'Excedido' : 'Disponible',
                     amount: available.abs(),

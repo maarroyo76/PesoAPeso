@@ -163,14 +163,17 @@ void main() {
     expect(txs.every((t) => t.paymentMethodId == null), isTrue,
         reason: 'todos quedan como "Sin especificar"');
     expect(await db.select(db.paymentMethods).get(), isEmpty);
+    expect((await db.select(db.categories).get()).every((c) => !c.archived),
+        isTrue,
+        reason: 'RF53: las categorías existentes quedan activas');
 
     // La columna nueva quedó con su clave foránea.
     final fks = await db
         .customSelect(
             "SELECT \"table\" FROM pragma_foreign_key_list('transactions')")
         .get();
-    expect(
-        fks.map((r) => r.read<String>('table')), contains('payment_methods'));
+    expect(fks.map((r) => r.read<String>('table')),
+        containsAll(['payment_methods', 'savings_goals']));
   });
 
   group('respaldo v2', () {
@@ -194,7 +197,7 @@ void main() {
 
       final exported = jsonDecode(jsonEncode(await db.exportAllData()))
           as Map<String, dynamic>;
-      expect(exported['version'], 2);
+      expect(exported['version'], kBackupFormatVersion);
 
       final db2 = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(db2.close);

@@ -17,6 +17,7 @@ import 'package:peso_a_peso/core/widgets/section_label.dart';
 import 'package:peso_a_peso/data/local/app_database.dart';
 import 'package:peso_a_peso/features/ajustes/ajustes_screen.dart';
 import 'package:peso_a_peso/features/estadisticas/estadisticas_screen.dart';
+import 'package:peso_a_peso/features/agregar_gasto/agregar_screen.dart';
 import 'package:peso_a_peso/features/resumen/resumen_screen.dart';
 
 void main() {
@@ -28,10 +29,15 @@ void main() {
 
   Widget app(Widget screen, AppDatabase db) {
     const category = Category(
-        id: 'ocio', name: 'Ocio', colorValue: 0xFF6B3F5C, iconKey: 'theaters');
+        id: 'ocio',
+        name: 'Ocio',
+        colorValue: 0xFF6B3F5C,
+        iconKey: 'theaters',
+        archived: false);
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
+        settingProvider.overrideWith((ref, key) => Stream.value(null)),
         paymentMethodsProvider
             .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
@@ -44,6 +50,10 @@ void main() {
         monthlyAdjustmentsProvider
             .overrideWith((ref) => Stream.value(<MonthlyAdjustment>[])),
         monthContributedProvider.overrideWith((ref, month) => Stream.value(0)),
+        quickExpenseTemplatesProvider
+            .overrideWith((ref) => Stream.value(<QuickExpenseTemplate>[])),
+        recurringTemplatesProvider
+            .overrideWith((ref) => Stream.value(<RecurringTemplate>[])),
       ],
       child: MaterialApp(home: Scaffold(body: screen)),
     );
@@ -203,19 +213,21 @@ void main() {
     await db.close();
   });
 
-  testWidgets('Resumen vacío en el mes actual lleva a Agregar (UX10)',
+  testWidgets('Resumen vacío en el mes actual abre el registro (UX10, UX04)',
       (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     await tester.pumpWidget(app(const ResumenScreen(), db));
     await tester.pumpAndSettle();
 
-    final container =
-        ProviderScope.containerOf(tester.element(find.byType(ResumenScreen)));
-    expect(container.read(selectedTabProvider), 0);
     await tester.ensureVisible(find.text('Registrar un gasto'));
     await tester.tap(find.text('Registrar un gasto'));
     await tester.pump();
-    expect(container.read(selectedTabProvider), kAgregarTabIndex);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(AgregarScreen), findsOneWidget,
+        reason: 'se abre la hoja de registro sobre Resumen');
+    await tester.tap(find.byTooltip('Cerrar'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     // En un mes pasado no se invita a registrar.
     await tester.fling(find.text('GASTO DEL MES'), const Offset(300, 0), 1500);

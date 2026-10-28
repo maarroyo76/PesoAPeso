@@ -23,6 +23,7 @@ import 'package:peso_a_peso/features/presupuestos/presupuestos_screen.dart';
 import 'package:peso_a_peso/features/recurrentes/recurrentes_screen.dart';
 import 'package:peso_a_peso/features/respaldo/respaldo_screen.dart';
 import 'package:peso_a_peso/features/resumen/resumen_screen.dart';
+import 'package:peso_a_peso/features/historial/historial_screen.dart';
 
 Future<void> setUpMainScreens() async {
   open.overrideFor(
@@ -42,6 +43,7 @@ const mainScreens = [
   ('Respaldo', RespaldoScreen()),
   ('Métodos de pago', PaymentMethodsScreen()),
   ('Compras en cuotas', CuotasScreen()),
+  ('Historial', HistorialScreen()),
 ];
 
 const categories = [
@@ -49,17 +51,27 @@ const categories = [
       id: 'alimentacion',
       name: 'Alimentación',
       colorValue: 0xFF2F6F4E,
-      iconKey: 'restaurant'),
+      iconKey: 'restaurant',
+      archived: false),
   Category(
       id: 'transporte',
       name: 'Transporte',
       colorValue: 0xFFB8842E,
-      iconKey: 'directions_car'),
+      iconKey: 'directions_car',
+      archived: false),
   Category(
       id: 'vivienda',
       name: 'Vivienda',
       colorValue: 0xFF3B6B78,
-      iconKey: 'home'),
+      iconKey: 'home',
+      archived: false),
+  // RF53: una archivada, para que Categorías muestre su sección.
+  Category(
+      id: 'compras',
+      name: 'Compras',
+      colorValue: 0xFF8A5A2B,
+      iconKey: 'shopping_bag',
+      archived: true),
 ];
 final now = DateTime.now();
 final month = DateTime(now.year, now.month);
@@ -139,6 +151,7 @@ const recurring = [
     dayOfMonth: 5,
     active: true,
     lastGeneratedYearMonth: 202610,
+    mode: 'auto',
   ),
   RecurringTemplate(
     id: 2,
@@ -148,6 +161,7 @@ const recurring = [
     dayOfMonth: 28,
     active: false,
     lastGeneratedYearMonth: 202609,
+    mode: 'auto',
   ),
 ];
 
@@ -166,6 +180,8 @@ Future<Future<void> Function()> pumpMainScreen(
       categoriesProvider.overrideWith((ref) => Stream.value(categories)),
       monthTransactionsProvider
           .overrideWith((ref, m) => Stream.value(txsFor(m))),
+      allTransactionsProvider.overrideWith(
+          (ref) => Stream.value([...txsFor(month), ...installmentTxs])),
       categoryBudgetsProvider.overrideWith((ref) => Stream.value(budgets)),
       monthlyBudgetsProvider.overrideWith((ref) => Stream.value([
             MonthlyBudget(year: month.year, month: month.month, amount: 150000)
@@ -175,6 +191,7 @@ Future<Future<void> Function()> pumpMainScreen(
       savingsGoalsProvider.overrideWith((ref) => Stream.value(goals)),
       savingsTotalsProvider.overrideWith((ref) => Stream.value({1: 450000})),
       monthContributedProvider.overrideWith((ref, m) => Stream.value(30000)),
+      settingProvider.overrideWith((ref, key) => Stream.value(null)),
       paymentMethodsProvider
           .overrideWith((ref) => Stream.value(paymentMethods)),
       installmentPlansProvider
@@ -183,6 +200,8 @@ Future<Future<void> Function()> pumpMainScreen(
           .overrideWith((ref) => Stream.value(installmentTxs)),
       quickExpenseTemplatesProvider.overrideWith((ref) => Stream.value(quick)),
       recurringTemplatesProvider.overrideWith((ref) => Stream.value(recurring)),
+      habitualOccurrencesProvider
+          .overrideWith((ref) => Stream.value(<HabitualOccurrence>[])),
     ],
     child: MaterialApp(
       theme: buildAppTheme(brightness: brightness),

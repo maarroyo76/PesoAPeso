@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'core/notifications/habitual_reminders.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/providers/app_providers.dart';
+import 'core/startup/budget_suggestion.dart';
 import 'core/startup/remainder_prompt.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/budget_alert.dart';
@@ -286,6 +288,11 @@ class _RootShellState extends ConsumerState<RootShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // RF48: "Registrar" / "Hoy no" con la app abierta usan esta conexión, así
+    // Resumen se actualiza al instante.
+    NotificationService.instance.onForegroundResponse = (response) =>
+        handleHabitualResponse(
+            ref.read(appDatabaseProvider), response, DateTime.now());
     // RF12: al abrir la app, genera la ocurrencia del mes actual de
     // cualquier plantilla recurrente que todavía no la tenga.
     WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupChecks());
@@ -302,6 +309,10 @@ class _RootShellState extends ConsumerState<RootShell>
     final now = DateTime.now();
     ref.read(currentMonthProvider.notifier).state =
         DateTime(now.year, now.month);
+    // RF48: una acción de notificación respondida en segundo plano escribió
+    // con otra conexión; los streams de esta no se enteran solos.
+    final db = ref.read(appDatabaseProvider);
+    db.markTablesUpdated({db.transactions, db.habitualOccurrences});
     _runStartupChecks();
   }
 
@@ -362,29 +373,35 @@ class _RootShellState extends ConsumerState<RootShell>
       }
     }
 
+    // RF48: los recordatorios de gastos habituales (reprograma también tras
+    // restaurar un respaldo o actualizar la app).
+    await syncHabitualRemindersFrom(ref.read(appDatabaseProvider));
+
     // RF15: remanente del mes anterior, si corresponde.
     if (!mounted) return;
     await checkPreviousMonthRemainder(context, ref);
+
+    // Onboarding "Aún no sé": al cerrar el primer mes, sugerir presupuesto.
+    if (!mounted) return;
+    await checkBudgetSuggestion(context, ref);
   }
 
-  List<Widget> get _screens => [
-        const ResumenScreen(),
-        AgregarScreen(active: _index == kAgregarTabIndex),
-        const PresupuestosScreen(),
-        const MetasScreen(),
-        const EstadisticasScreen(),
-      ];
+  static const _screens = [
+    ResumenScreen(),
+    PresupuestosScreen(),
+    MetasScreen(),
+    EstadisticasScreen(),
+  ];
+
+  /// UX04: el registro es un botón al centro de la barra, no una pestaña:
+  /// abre la hoja de registro y el usuario sigue en la pantalla donde estaba.
+  static const _registerSlot = 2;
 
   static const _destinations = [
     (
       icon: Icons.menu_book_outlined,
       selectedIcon: Icons.menu_book,
       label: 'Resumen',
-    ),
-    (
-      icon: Icons.add_circle_outline,
-      selectedIcon: Icons.add_circle,
-      label: 'Agregar',
     ),
     (
       icon: Icons.account_balance_wallet_outlined,
@@ -403,7 +420,12 @@ class _RootShellState extends ConsumerState<RootShell>
     ),
   ];
 
-  void _selectTab(int i) {
+  void _selectDestination(int slot) {
+    if (slot == _registerSlot) {
+      showRegisterSheet(context);
+      return;
+    }
+    final i = slot > _registerSlot ? slot - 1 : slot;
     if (i == ref.read(selectedTabProvider)) return;
     ref.read(selectedTabProvider.notifier).state = i;
   }
@@ -411,9 +433,18 @@ class _RootShellState extends ConsumerState<RootShell>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    NotificationService.instance.onForegroundResponse = null;
     _fadeController.dispose();
     super.dispose();
   }
+
+  static NavigationDestination _destination(BuildContext context,
+          ({IconData icon, IconData selectedIcon, String label}) d) =>
+      NavigationDestination(
+        icon: Icon(d.icon, color: context.colors.inkSoft),
+        selectedIcon: Icon(d.selectedIcon, color: context.colors.green),
+        label: d.label,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -447,18 +478,29 @@ class _RootShellState extends ConsumerState<RootShell>
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _selectTab,
+        selectedIndex: _index >= _registerSlot ? _index + 1 : _index,
+        onDestinationSelected: _selectDestination,
         backgroundColor: context.colors.paperDeep,
         indicatorColor: context.colors.green.withValues(alpha: 0.18),
         animationDuration: const Duration(milliseconds: 350),
         destinations: [
-          for (final d in _destinations)
-            NavigationDestination(
-              icon: Icon(d.icon, color: context.colors.inkSoft),
-              selectedIcon: Icon(d.selectedIcon, color: context.colors.green),
-              label: d.label,
+          for (final d in _destinations.take(_registerSlot))
+            _destination(context, d),
+          NavigationDestination(
+            icon: Container(
+              width: 48,
+              height: 32,
+              decoration: BoxDecoration(
+                color: context.colors.ink,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(Icons.add, color: context.colors.paper),
             ),
+            label: 'Registrar',
+            tooltip: 'Registrar gasto',
+          ),
+          for (final d in _destinations.skip(_registerSlot))
+            _destination(context, d),
         ],
       ),
     );

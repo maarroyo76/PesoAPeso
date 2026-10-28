@@ -2,18 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/notifications/habitual_reminders.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
+import '../../core/utils/habitual.dart';
 import '../../core/widgets/load_error.dart';
+import '../../core/widgets/section_label.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
 import '../agregar_gasto/expense_form.dart' show ExpenseCategoryChip;
+import '../categorias/category_filters.dart';
+import 'habitual_editor.dart';
 
 /// RF25: ver, editar y eliminar los pagos recurrentes ya creados (RF12) —
 /// antes solo se podían crear desde AgregarScreen, y quedaban invisibles.
+///
+/// RF47: también los gastos habituales, que se crean, editan, pausan y
+/// eliminan desde acá.
 class RecurrentesScreen extends ConsumerWidget {
   const RecurrentesScreen({super.key});
 
@@ -33,42 +41,84 @@ class RecurrentesScreen extends ConsumerWidget {
           error: (e, _) => LoadError(e),
           data: (categories) {
             final categoriesById = {for (final c in categories) c.id: c};
-            if (templates.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'No tienes gastos recurrentes todavía. Se crean desde '
-                    '"Agregar" marcando "Gasto recurrente".',
-                    textAlign: TextAlign.center,
-                    style:
-                        TextStyle(color: context.colors.inkSoft, fontSize: 13),
-                  ),
-                ),
+            final habituals = templates.where(isHabitual).toList();
+            final fixed = templates.where((t) => !isHabitual(t)).toList();
+            Widget tile(RecurringTemplate tpl) {
+              final category = categoriesById[tpl.categoryId];
+              if (category == null) return const SizedBox.shrink();
+              return _RecurringTile(
+                template: tpl,
+                category: category,
+                onTap: () => isHabitual(tpl)
+                    ? showHabitualEditor(context, ref, categories,
+                        template: tpl)
+                    : showRecurringEditor(context, ref, categories,
+                        template: tpl),
+                onDelete: () => _delete(context, ref, tpl),
               );
             }
-            return ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: templates.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, indent: 20),
-              itemBuilder: (context, i) {
-                final tpl = templates[i];
-                final category = categoriesById[tpl.categoryId];
-                if (category == null) return const SizedBox.shrink();
-                return _RecurringTile(
-                  template: tpl,
-                  category: category,
-                  onTap: () => showRecurringEditor(context, ref, categories,
-                      template: tpl),
-                  onDelete: () => _delete(context, ref, tpl),
-                );
-              },
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: SectionLabel('Gastos habituales'),
+                ),
+                const SizedBox(height: 8),
+                if (habituals.isEmpty)
+                  _hint(
+                      context,
+                      'El metro, la colación: gastos que se repiten casi a '
+                      'diario, pero no siempre. Te preguntamos a la hora que '
+                      'elijas y solo se registran si confirmas.'),
+                for (final tpl in habituals) ...[
+                  tile(tpl),
+                  const Divider(height: 1, indent: 20),
+                ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                          foregroundColor: context.colors.ink),
+                      onPressed: () =>
+                          showHabitualEditor(context, ref, categories),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Nuevo gasto habitual'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: SectionLabel('Pagos fijos mensuales'),
+                ),
+                const SizedBox(height: 8),
+                if (fixed.isEmpty)
+                  _hint(
+                      context,
+                      'No tienes pagos fijos todavía. Se crean desde '
+                      '"Registrar" marcando "Gasto recurrente", y se '
+                      'registran solos cada mes.'),
+                for (final tpl in fixed) ...[
+                  tile(tpl),
+                  const Divider(height: 1, indent: 20),
+                ],
+              ],
             );
           },
         ),
       ),
     );
   }
+
+  Widget _hint(BuildContext context, String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+        child: Text(text,
+            style: TextStyle(color: context.colors.inkSoft, fontSize: 13)),
+      );
 
   /// UX02: elimina sin diálogo y ofrece deshacer. Los gastos ya generados
   /// se mantienen; solo se detienen los futuros.
@@ -78,10 +128,17 @@ class RecurrentesScreen extends ConsumerWidget {
     final undo = await ref
         .read(recurringTemplatesRepositoryProvider)
         .deleteTemplateUndoable(template.id);
+    final db = ref.read(appDatabaseProvider);
+    if (isHabitual(template)) await syncHabitualRemindersFrom(db);
     showUndoSnackBar(messenger,
-        message:
-            'Recurrente eliminado. Los gastos ya registrados se mantienen.',
-        onUndo: undo);
+        message: isHabitual(template)
+            ? 'Gasto habitual eliminado. Los gastos ya registrados se '
+                'mantienen.'
+            : 'Recurrente eliminado. Los gastos ya registrados se mantienen.',
+        onUndo: () async {
+      await undo();
+      if (isHabitual(template)) await syncHabitualRemindersFrom(db);
+    });
   }
 }
 
@@ -93,6 +150,7 @@ Future<void> showRecurringEditor(
   List<Category> categories, {
   required RecurringTemplate template,
 }) async {
+  categories = selectableCategories(categories, keep: template.categoryId);
   final amountController =
       TextEditingController(text: formatAmountInput(template.amount));
   final noteController = TextEditingController(text: template.note);
@@ -282,7 +340,8 @@ class _RecurringTile extends StatelessWidget {
           // no cabía con letra grande.
           subtitle: Text(
               '${template.active ? '' : 'Pausado · '}'
-              'Día ${template.dayOfMonth} de cada mes · ${category.name}',
+              '${isHabitual(template) ? '${describeWeekdays(template.weekdays ?? 0)}, ${template.reminderTime}' : 'Día ${template.dayOfMonth} de cada mes'}'
+              ' · ${category.name}',
               style: TextStyle(fontSize: 11, color: context.colors.inkSoft)),
           trailing: Text(
             currencyFmt.format(template.amount),

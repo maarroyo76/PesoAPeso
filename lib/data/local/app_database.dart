@@ -25,6 +25,10 @@ class Categories extends Table {
   // fallback antes de que el ícono fuera elegible.
   TextColumn get iconKey => text().withDefault(const Constant('category'))();
 
+  /// RF53: archivada. No se ofrece al registrar ni en Presupuestos, pero
+  /// sigue en el historial y en Estadísticas, y se puede restaurar.
+  BoolColumn get archived => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -140,6 +144,15 @@ class Transactions extends Table {
   IntColumn get installmentPlanId => integer().nullable()();
   IntColumn get installmentNumber => integer().nullable()();
 
+  /// RF52: meta de ahorro con que se pagó. Descuenta del saldo de la meta y
+  /// no del presupuesto del mes; sigue contando en su categoría en
+  /// Estadísticas.
+  IntColumn get fundedByGoalId => integer().nullable()();
+
+  /// RF37: revisión semanal. true = "valió la pena", false = "no tanto",
+  /// null = no revisado.
+  BoolColumn get worthIt => boolean().nullable()();
+
   @override
   List<String> get customConstraints => [
         'FOREIGN KEY (category_id) REFERENCES categories (id)',
@@ -147,6 +160,7 @@ class Transactions extends Table {
             'ON DELETE SET NULL',
         'FOREIGN KEY (payment_method_id) REFERENCES payment_methods (id)',
         'FOREIGN KEY (installment_plan_id) REFERENCES installment_plans (id)',
+        'FOREIGN KEY (funded_by_goal_id) REFERENCES savings_goals (id)',
       ];
 }
 
@@ -162,9 +176,51 @@ class RecurringTemplates extends Table {
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   IntColumn get lastGeneratedYearMonth => integer()();
 
+  /// RF47: 'auto' (pago fijo mensual, se registra solo) o 'confirm' (gasto
+  /// habitual: pide confirmación cada día programado). Ver
+  /// `core/utils/habitual.dart`. En modo confirm no se usan `dayOfMonth` ni
+  /// `lastGeneratedYearMonth` (quedan en 0).
+  TextColumn get mode => text().withDefault(const Constant('auto'))();
+
+  /// Solo modo confirm: días como máscara de bits (lunes = 1 … domingo = 64),
+  /// hora del recordatorio "HH:mm" (RF48) y método de pago del gasto.
+  IntColumn get weekdays => integer().nullable()();
+  TextColumn get reminderTime => text().nullable()();
+  IntColumn get paymentMethodId => integer().nullable()();
+
+  /// Solo modo confirm: desde qué día hay pendientes (RF49). Se fija al crear
+  /// y al reactivar, para que los días en pausa no aparezcan como pendientes.
+  DateTimeColumn get startDate => dateTime().nullable()();
+
   @override
-  List<String> get customConstraints =>
-      ['FOREIGN KEY (category_id) REFERENCES categories (id)'];
+  List<String> get customConstraints => [
+        'FOREIGN KEY (category_id) REFERENCES categories (id)',
+        'FOREIGN KEY (payment_method_id) REFERENCES payment_methods (id)',
+      ];
+}
+
+/// RF48/RF49: decisión del usuario sobre un día programado de un gasto
+/// habitual. Un día programado sin fila es un pendiente. Con la plantilla se
+/// borran sus decisiones; el gasto registrado se mantiene.
+class HabitualOccurrences extends Table {
+  IntColumn get templateId => integer()();
+  DateTimeColumn get date => dateTime()();
+
+  /// 'registered' o 'skipped' ("Hoy no").
+  TextColumn get status => text()();
+  IntColumn get transactionId => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {templateId, date};
+
+  @override
+  List<String> get customConstraints => [
+        'FOREIGN KEY (template_id) REFERENCES recurring_templates (id) '
+            'ON DELETE CASCADE',
+        'FOREIGN KEY (transaction_id) REFERENCES transactions (id) '
+            'ON DELETE SET NULL',
+        "CHECK (status IN ('registered', 'skipped'))",
+      ];
 }
 
 /// RF24: acceso rápido de gasto (RF02), configurable por el usuario — antes
@@ -246,8 +302,9 @@ class AppSettings extends Table {
 }
 
 /// Defaults históricos de RF02 (antes hardcodeados en `kQuickTemplates`),
-/// usados tanto en `onCreate` como al migrar instalaciones existentes en
-/// `onUpgrade` (from < 7), para que nadie pierda sus accesos rápidos.
+/// usados al migrar instalaciones existentes en `onUpgrade` (from < 7),
+/// para que nadie pierda sus accesos rápidos. Apuntan a las categorías del
+/// catálogo anterior, que esas instalaciones tienen.
 final _defaultQuickExpenseTemplates = [
   QuickExpenseTemplatesCompanion.insert(
       label: 'Café', amount: 2500, categoryId: 'alimentacion'),
@@ -265,11 +322,143 @@ final _defaultQuickExpenseTemplates = [
 /// instalaciones nuevas (onCreate): la migración (from < 7) sigue creando
 /// exactamente los cinco accesos de siempre.
 const kBipTopUpLabel = 'Carga bip!';
+
+/// Una categoría del catálogo por defecto.
+typedef DefaultCategory = ({
+  String id,
+  String name,
+  int colorValue,
+  String iconKey,
+  bool preselected,
+});
+
+/// Catálogo de instalaciones nuevas: según para qué fue el gasto, no dónde
+/// se compró. Quien ya tenía la app conserva sus categorías (solo cambia
+/// onCreate). Los ids de Transporte, Vivienda, Salud y Ocio son los de
+/// siempre.
+const List<DefaultCategory> kDefaultCategories = [
+  (
+    id: 'supermercado',
+    name: 'Supermercado y feria',
+    colorValue: 0xFF2F6F4E,
+    iconKey: 'local_grocery_store',
+    preselected: true
+  ),
+  (
+    id: 'comida_fuera',
+    name: 'Comida fuera',
+    colorValue: 0xFFA63D2B,
+    iconKey: 'restaurant',
+    preselected: true
+  ),
+  (
+    id: 'transporte',
+    name: 'Transporte',
+    colorValue: 0xFFB8842E,
+    iconKey: 'directions_bus',
+    preselected: true
+  ),
+  (
+    id: 'vivienda',
+    name: 'Vivienda',
+    colorValue: 0xFF3B6B78,
+    iconKey: 'home',
+    preselected: true
+  ),
+  (
+    id: 'cuentas',
+    name: 'Cuentas y servicios',
+    colorValue: 0xFF2B6B8A,
+    iconKey: 'bolt',
+    preselected: true
+  ),
+  (
+    id: 'salud',
+    name: 'Salud',
+    colorValue: 0xFF4B7A3E,
+    iconKey: 'medical_services',
+    preselected: true
+  ),
+  (
+    id: 'ocio',
+    name: 'Ocio y salidas',
+    colorValue: 0xFF6B3F5C,
+    iconKey: 'theaters',
+    preselected: true
+  ),
+  (
+    id: 'otros',
+    name: 'Otros',
+    colorValue: 0xFF5C6B54,
+    iconKey: 'category',
+    preselected: true
+  ),
+  (
+    id: 'suscripciones',
+    name: 'Suscripciones',
+    colorValue: 0xFF7A4B8A,
+    iconKey: 'subscriptions',
+    preselected: false
+  ),
+  (
+    id: 'educacion',
+    name: 'Educación',
+    colorValue: 0xFF4B4B8A,
+    iconKey: 'school',
+    preselected: false
+  ),
+  (
+    id: 'ropa',
+    name: 'Ropa y cuidado personal',
+    colorValue: 0xFF8A2B45,
+    iconKey: 'checkroom',
+    preselected: false
+  ),
+  (
+    id: 'hogar',
+    name: 'Hogar y tecnología',
+    colorValue: 0xFF8A5A2B,
+    iconKey: 'devices',
+    preselected: false
+  ),
+  (
+    id: 'mascotas',
+    name: 'Mascotas',
+    colorValue: 0xFF8A7A2B,
+    iconKey: 'pets',
+    preselected: false
+  ),
+  (
+    id: 'regalos',
+    name: 'Regalos y familia',
+    colorValue: 0xFF8A3F6B,
+    iconKey: 'card_giftcard',
+    preselected: false
+  ),
+  (
+    id: 'creditos',
+    name: 'Créditos y deudas',
+    colorValue: 0xFF6B4B2B,
+    iconKey: 'credit_card',
+    preselected: false
+  ),
+];
+
+/// Accesos de una instalación nueva, en las categorías del catálogo. Los de
+/// una categoría que el usuario no elija no se muestran (está archivada).
 final _defaultQuickExpenseTemplatesForNewInstall = [
-  ..._defaultQuickExpenseTemplates.take(3),
+  QuickExpenseTemplatesCompanion.insert(
+      label: 'Café', amount: 2500, categoryId: 'comida_fuera'),
+  QuickExpenseTemplatesCompanion.insert(
+      label: 'Colación', amount: 3500, categoryId: 'comida_fuera'),
+  QuickExpenseTemplatesCompanion.insert(
+      label: 'Micro/Metro', amount: 790, categoryId: 'transporte'),
   QuickExpenseTemplatesCompanion.insert(
       label: kBipTopUpLabel, amount: 5000, categoryId: 'transporte'),
-  ..._defaultQuickExpenseTemplates.skip(3),
+  QuickExpenseTemplatesCompanion.insert(
+      label: 'Bencina', amount: 20000, categoryId: 'transporte'),
+  QuickExpenseTemplatesCompanion.insert(
+      label: 'Salida', amount: 15000, categoryId: 'ocio'),
 ];
 
 // --- Base de datos -------------------------------------------------------
@@ -288,6 +477,7 @@ final _defaultQuickExpenseTemplatesForNewInstall = [
   MonthlyAdjustments,
   PaymentMethods,
   InstallmentPlans,
+  HabitualOccurrences,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openDatabaseConnection());
@@ -296,13 +486,24 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   /// Columnas de Transactions agregadas en v10.
   List<GeneratedColumn> get _transactionColumnsV10 => [
         transactions.paymentMethodId,
         transactions.installmentPlanId,
         transactions.installmentNumber,
+        transactions.fundedByGoalId,
+        transactions.worthIt,
+      ];
+
+  /// Columnas de RecurringTemplates agregadas en v11 (RF47).
+  List<GeneratedColumn> get _recurringColumnsV11 => [
+        recurringTemplates.mode,
+        recurringTemplates.weekdays,
+        recurringTemplates.reminderTime,
+        recurringTemplates.paymentMethodId,
+        recurringTemplates.startDate,
       ];
 
   @override
@@ -316,80 +517,20 @@ class AppDatabase extends _$AppDatabase {
         },
         onCreate: (m) async {
           await m.createAll();
-          final now = DateTime.now();
+          // Catálogo de 15 categorías; las 7 no preseleccionadas quedan
+          // archivadas (RF53) y el onboarding las activa con un toque. Sin
+          // presupuestos: el usuario los define o elige "Aún no sé".
           await batch((b) {
             b.insertAll(categories, [
-              CategoriesCompanion.insert(
-                  id: 'alimentacion',
-                  name: 'Alimentación',
-                  colorValue: 0xFF2F6F4E,
-                  iconKey: const Value('restaurant')),
-              CategoriesCompanion.insert(
-                  id: 'transporte',
-                  name: 'Transporte',
-                  colorValue: 0xFFB8842E,
-                  iconKey: const Value('directions_car')),
-              CategoriesCompanion.insert(
-                  id: 'vivienda',
-                  name: 'Vivienda',
-                  colorValue: 0xFF3B6B78,
-                  iconKey: const Value('home')),
-              CategoriesCompanion.insert(
-                  id: 'ocio',
-                  name: 'Ocio',
-                  colorValue: 0xFF6B3F5C,
-                  iconKey: const Value('theaters')),
-              CategoriesCompanion.insert(
-                  id: 'salud',
-                  name: 'Salud',
-                  colorValue: 0xFF4B7A3E,
-                  iconKey: const Value('favorite')),
-              CategoriesCompanion.insert(
-                  id: 'compras',
-                  name: 'Compras',
-                  colorValue: 0xFF8A5A2B,
-                  iconKey: const Value('shopping_bag')),
+              for (final c in kDefaultCategories)
+                CategoriesCompanion.insert(
+                  id: c.id,
+                  name: c.name,
+                  colorValue: c.colorValue,
+                  iconKey: Value(c.iconKey),
+                  archived: Value(!c.preselected),
+                ),
             ]);
-            b.insertAll(categoryBudgets, [
-              CategoryBudgetsCompanion.insert(
-                  categoryId: 'alimentacion',
-                  year: now.year,
-                  month: now.month,
-                  amount: 150000),
-              CategoryBudgetsCompanion.insert(
-                  categoryId: 'transporte',
-                  year: now.year,
-                  month: now.month,
-                  amount: 40000),
-              CategoryBudgetsCompanion.insert(
-                  categoryId: 'vivienda',
-                  year: now.year,
-                  month: now.month,
-                  amount: 250000),
-              CategoryBudgetsCompanion.insert(
-                  categoryId: 'ocio',
-                  year: now.year,
-                  month: now.month,
-                  amount: 60000),
-              CategoryBudgetsCompanion.insert(
-                  categoryId: 'salud',
-                  year: now.year,
-                  month: now.month,
-                  amount: 30000),
-              CategoryBudgetsCompanion.insert(
-                  categoryId: 'compras',
-                  year: now.year,
-                  month: now.month,
-                  amount: 50000),
-            ]);
-            // Mismo total que la suma de las categorías seedeadas arriba, para
-            // que una instalación nueva no arranque en estado de
-            // sobre-asignación por defecto.
-            b.insert(
-              monthlyBudgets,
-              MonthlyBudgetsCompanion.insert(
-                  year: now.year, month: now.month, amount: 580000),
-            );
             b.insertAll(quickExpenseTemplates,
                 _defaultQuickExpenseTemplatesForNewInstall);
           });
@@ -415,8 +556,12 @@ class AppDatabase extends _$AppDatabase {
                 ),
               );
             }
+            // La tabla se crea con el esquema ACTUAL: las columnas posteriores
+            // a v1 van en `newColumns` para que tomen su default. Si no,
+            // SQLite copia su nombre entre comillas como texto ('archived').
             // ignore: experimental_member_use
-            await m.alterTable(TableMigration(categories));
+            await m.alterTable(TableMigration(categories,
+                newColumns: [categories.iconKey, categories.archived]));
           }
           if (from < 3) {
             await m.createTable(recurringTemplates);
@@ -486,7 +631,8 @@ class AppDatabase extends _$AppDatabase {
             // ignore: experimental_member_use
             await m.alterTable(TableMigration(categoryBudgets));
             // ignore: experimental_member_use
-            await m.alterTable(TableMigration(recurringTemplates));
+            await m.alterTable(TableMigration(recurringTemplates,
+                newColumns: _recurringColumnsV11));
             // `alterTable` crea la tabla con el esquema ACTUAL, así que
             // también trae la columna de v10; queda en null igual que allá.
             // ignore: experimental_member_use
@@ -531,6 +677,23 @@ class AppDatabase extends _$AppDatabase {
               await m.alterTable(TableMigration(transactions,
                   newColumns: _transactionColumnsV10));
             }
+            // RF53. Si pasamos por `from < 2`, la tabla ya se reconstruyó con
+            // el esquema actual (igual que iconKey en `from < 8`).
+            if (from >= 2) {
+              await m.addColumn(categories, categories.archived);
+            }
+          }
+          if (from < 11) {
+            // RF47: gastos habituales. Las plantillas existentes quedan en
+            // modo 'auto', como hasta ahora. Si pasamos por `from < 9`, la
+            // tabla ya se reconstruyó con estas columnas; si no, se
+            // reconstruye por la clave foránea del método de pago.
+            if (from >= 9) {
+              // ignore: experimental_member_use
+              await m.alterTable(TableMigration(recurringTemplates,
+                  newColumns: _recurringColumnsV11));
+            }
+            await m.createTable(habitualOccurrences);
           }
         },
       );
@@ -567,6 +730,12 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// RF37: marca un gasto como "valió la pena" (true), "no tanto" (false) o
+  /// sin revisar (null).
+  Future<void> setWorthIt(int id, bool? worthIt) =>
+      (update(transactions)..where((t) => t.id.equals(id)))
+          .write(TransactionsCompanion(worthIt: Value(worthIt)));
+
   // --- Métodos de pago (RF31/RF32) -----------------------------------------
 
   Stream<List<PaymentMethod>> watchPaymentMethods() =>
@@ -584,6 +753,9 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> countInstallmentPlansForPaymentMethod(int id) => _countWhere(
       installmentPlans, installmentPlans.paymentMethodId.equals(id));
+
+  Future<int> countRecurringTemplatesForPaymentMethod(int id) => _countWhere(
+      recurringTemplates, recurringTemplates.paymentMethodId.equals(id));
 
   /// RF31: como con las categorías, la UI solo lo permite sin gastos
   /// asociados; la clave foránea lo impide igual si se intentara.
@@ -771,6 +943,110 @@ class AppDatabase extends _$AppDatabase {
       _countWhere(quickExpenseTemplates,
           quickExpenseTemplates.categoryId.equals(categoryId));
 
+  /// RF53: archiva la categoría. Su presupuesto pasa a 0 desde este mes
+  /// (los meses pasados no cambian), para que no siga asignado en una
+  /// categoría que ya no se muestra. Devuelve cómo deshacerlo por completo.
+  Future<Future<void> Function()> archiveCategory(String id,
+          {DateTime? today}) =>
+      transaction(() async {
+        final now = today ?? DateTime.now();
+        Expression<bool> thisMonth(CategoryBudgets b) =>
+            b.categoryId.equals(id) &
+            b.year.equals(now.year) &
+            b.month.equals(now.month);
+        final previous =
+            await (select(categoryBudgets)..where(thisMonth)).getSingleOrNull();
+        final hasBudget = await _countWhere(
+                categoryBudgets, categoryBudgets.categoryId.equals(id)) >
+            0;
+        await _setCategoryArchived(id, true);
+        if (hasBudget) await setBudgetForMonth(id, now, 0);
+        return () => transaction(() async {
+              await _setCategoryArchived(id, false);
+              if (!hasBudget) return;
+              if (previous != null) {
+                await into(categoryBudgets)
+                    .insertOnConflictUpdate(previous.toCompanion(false));
+              } else {
+                await (delete(categoryBudgets)..where(thisMonth)).go();
+              }
+            });
+      });
+
+  /// Onboarding: deja activas solo las categorías [activeIds]; las demás
+  /// quedan archivadas (RF53) y se pueden activar después.
+  Future<void> setActiveCategories(Set<String> activeIds) =>
+      transaction(() async {
+        await update(categories)
+            .write(const CategoriesCompanion(archived: Value(true)));
+        await (update(categories)..where((c) => c.id.isIn(activeIds)))
+            .write(const CategoriesCompanion(archived: Value(false)));
+      });
+
+  /// RF53: restaura una categoría archivada. Su presupuesto queda en 0
+  /// hasta que el usuario le asigne uno.
+  Future<void> unarchiveCategory(String id) => _setCategoryArchived(id, false);
+
+  Future<void> _setCategoryArchived(String id, bool archived) =>
+      (update(categories)..where((c) => c.id.equals(id)))
+          .write(CategoriesCompanion(archived: Value(archived)));
+
+  /// RF54: fusiona [fromId] en [intoId]. Gastos, recurrentes, accesos
+  /// rápidos, planes en cuotas y ajustes de un mes pasan a la categoría
+  /// destino, y la original se elimina. Los presupuestos se suman mes a
+  /// mes, así ningún mes pierde lo que tenía asignado. Devuelve cuántos
+  /// gastos se movieron.
+  Future<int> mergeCategory(String fromId, String intoId) =>
+      transaction(() async {
+        if (fromId == intoId) {
+          throw ArgumentError('No se puede fusionar una categoría en sí misma');
+        }
+        final moved = await (update(transactions)
+              ..where((t) => t.categoryId.equals(fromId)))
+            .write(TransactionsCompanion(categoryId: Value(intoId)));
+        await (update(recurringTemplates)
+              ..where((t) => t.categoryId.equals(fromId)))
+            .write(RecurringTemplatesCompanion(categoryId: Value(intoId)));
+        await (update(quickExpenseTemplates)
+              ..where((t) => t.categoryId.equals(fromId)))
+            .write(QuickExpenseTemplatesCompanion(categoryId: Value(intoId)));
+        await (update(installmentPlans)
+              ..where((p) => p.categoryId.equals(fromId)))
+            .write(InstallmentPlansCompanion(categoryId: Value(intoId)));
+        await (update(monthlyAdjustments)
+              ..where((a) => a.categoryId.equals(fromId)))
+            .write(MonthlyAdjustmentsCompanion(categoryId: Value(intoId)));
+
+        // El presupuesto vigente es escalonado (cada fila vale hasta la
+        // siguiente), así que basta escribir la suma en cada mes donde
+        // cambia alguno de los dos.
+        final rows = await (select(categoryBudgets)
+              ..where((b) => b.categoryId.isIn([fromId, intoId])))
+            .get();
+        int resolve(String id, int ym) {
+          CategoryBudget? latest;
+          for (final b in rows) {
+            final bym = b.year * 100 + b.month;
+            if (b.categoryId != id || bym > ym) continue;
+            if (latest == null || latest.year * 100 + latest.month < bym) {
+              latest = b;
+            }
+          }
+          return latest?.amount ?? 0;
+        }
+
+        final months = {for (final b in rows) b.year * 100 + b.month};
+        for (final ym in months) {
+          await setBudgetForMonth(intoId, DateTime(ym ~/ 100, ym % 100),
+              resolve(intoId, ym) + resolve(fromId, ym));
+        }
+        await (delete(categoryBudgets)
+              ..where((b) => b.categoryId.equals(fromId)))
+            .go();
+        await (delete(categories)..where((c) => c.id.equals(fromId))).go();
+        return moved;
+      });
+
   Future<void> deleteCategory(String id) => transaction(() async {
         await (delete(categoryBudgets)..where((b) => b.categoryId.equals(id)))
             .go();
@@ -866,6 +1142,22 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteQuickExpenseTemplate(int id) =>
       (delete(quickExpenseTemplates)..where((t) => t.id.equals(id))).go();
 
+  Future<Transaction?> transactionById(int id) =>
+      (select(transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  /// Gastos desde [from] (incluido).
+  Future<List<Transaction>> transactionsSince(DateTime from) =>
+      (select(transactions)..where((t) => t.date.isBiggerOrEqualValue(from)))
+          .get();
+
+  /// UX06: todos los gastos, del más reciente.
+  Stream<List<Transaction>> watchAllTransactions() => (select(transactions)
+        ..orderBy([
+          (t) => OrderingTerm.desc(t.date),
+          (t) => OrderingTerm.desc(t.id),
+        ]))
+      .watch();
+
   Stream<List<Transaction>> watchTransactionsForMonth(DateTime month) {
     final start = DateTime(month.year, month.month, 1);
     final end = DateTime(month.year, month.month + 1, 1);
@@ -951,11 +1243,27 @@ class AppDatabase extends _$AppDatabase {
               ..where(transactions.recurringTemplateId.equals(id)))
             .map((r) => r.read(transactions.id)!)
             .get();
+        // RF49: las decisiones de un gasto habitual se borran en cascada.
+        final occurrences = await (select(habitualOccurrences)
+              ..where((o) => o.templateId.equals(id)))
+            .get();
         await deleteRecurringTemplate(id);
         return () => transaction(() async {
               await into(recurringTemplates).insert(row.toCompanion(false));
               await (update(transactions)..where((t) => t.id.isIn(linkedIds)))
                   .write(TransactionsCompanion(recurringTemplateId: Value(id)));
+              for (final o in occurrences) {
+                // El gasto pudo borrarse mientras tanto (queda sin enlace).
+                final txExists = o.transactionId != null &&
+                    await (select(transactions)
+                              ..where((t) => t.id.equals(o.transactionId!)))
+                            .getSingleOrNull() !=
+                        null;
+                await into(habitualOccurrences).insert(o
+                    .copyWith(
+                        transactionId: Value(txExists ? o.transactionId : null))
+                    .toCompanion(false));
+              }
             });
       });
 
@@ -969,8 +1277,9 @@ class AppDatabase extends _$AppDatabase {
   Future<List<Transaction>> runRecurringCatchUp({DateTime? today}) async {
     final now = today ?? DateTime.now();
     final currentYm = now.year * 100 + now.month;
+    // Los gastos habituales (RF47) no se registran solos.
     final templates = await (select(recurringTemplates)
-          ..where((t) => t.active.equals(true)))
+          ..where((t) => t.active.equals(true) & t.mode.equals('auto')))
         .get();
 
     final generated = <Transaction>[];
@@ -1005,6 +1314,142 @@ class AppDatabase extends _$AppDatabase {
     return generated;
   }
 
+  // --- Gastos habituales (RF47/RF48/RF49) ---------------------------------
+
+  /// RF47: crea un gasto habitual. [startDate] es desde cuándo cuentan los
+  /// pendientes (RF49): los días anteriores a crearlo no se piden.
+  Future<int> insertHabitualTemplate({
+    required String categoryId,
+    required int amount,
+    required String note,
+    required int weekdays,
+    required String reminderTime,
+    required int? paymentMethodId,
+    required DateTime startDate,
+  }) =>
+      into(recurringTemplates).insert(RecurringTemplatesCompanion.insert(
+        categoryId: categoryId,
+        amount: amount,
+        note: Value(note),
+        dayOfMonth: 0,
+        lastGeneratedYearMonth: 0,
+        mode: const Value('confirm'),
+        weekdays: Value(weekdays),
+        reminderTime: Value(reminderTime),
+        paymentMethodId: Value(paymentMethodId),
+        startDate: Value(startDate),
+      ));
+
+  /// RF47: editar, pausar o reactivar un gasto habitual. Al reactivarlo, los
+  /// pendientes vuelven a contar desde [today]: los días en pausa no se piden.
+  Future<void> updateHabitualTemplate(
+    int id, {
+    required String categoryId,
+    required int amount,
+    required String note,
+    required int weekdays,
+    required String reminderTime,
+    required int? paymentMethodId,
+    required bool active,
+    required DateTime today,
+  }) async {
+    final existing = await (select(recurringTemplates)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (existing == null) return;
+    final reactivated = !existing.active && active;
+    await (update(recurringTemplates)..where((t) => t.id.equals(id))).write(
+      RecurringTemplatesCompanion(
+        categoryId: Value(categoryId),
+        amount: Value(amount),
+        note: Value(note),
+        weekdays: Value(weekdays),
+        reminderTime: Value(reminderTime),
+        paymentMethodId: Value(paymentMethodId),
+        active: Value(active),
+        startDate: reactivated
+            ? Value(DateTime(today.year, today.month, today.day))
+            : const Value.absent(),
+      ),
+    );
+  }
+
+  Stream<List<HabitualOccurrence>> watchHabitualOccurrencesSince(
+          DateTime since) =>
+      (select(habitualOccurrences)
+            ..where((o) => o.date.isBiggerOrEqualValue(since)))
+          .watch();
+
+  /// RF48/RF49: registra el gasto habitual de [day] (fecha sin hora) con
+  /// fecha [date]. Gasto y decisión van juntos en una transacción. Devuelve
+  /// el id del gasto, o null si ese día ya estaba decidido (p. ej. se
+  /// respondió la notificación y además la tarjeta de Resumen).
+  Future<int?> registerHabitual({
+    required int templateId,
+    required DateTime day,
+    required DateTime date,
+  }) =>
+      transaction(() async {
+        final template = await (select(recurringTemplates)
+              ..where((t) => t.id.equals(templateId)))
+            .getSingleOrNull();
+        if (template == null || await _habitualDecided(templateId, day)) {
+          return null;
+        }
+        final txId = await into(transactions).insert(
+          TransactionsCompanion.insert(
+            categoryId: template.categoryId,
+            amount: template.amount,
+            date: date,
+            note: Value(template.note),
+            paymentMethodId: Value(template.paymentMethodId),
+          ),
+        );
+        await into(habitualOccurrences).insert(
+          HabitualOccurrencesCompanion.insert(
+            templateId: templateId,
+            date: day,
+            status: 'registered',
+            transactionId: Value(txId),
+          ),
+        );
+        return txId;
+      });
+
+  /// RF48/RF49: "Hoy no". No hace nada si ese día ya estaba decidido.
+  Future<void> skipHabitual({required int templateId, required DateTime day}) =>
+      into(habitualOccurrences).insert(
+        HabitualOccurrencesCompanion.insert(
+            templateId: templateId, date: day, status: 'skipped'),
+        mode: InsertMode.insertOrIgnore,
+      );
+
+  /// Deshace un registro o un "Hoy no": el día vuelve a quedar pendiente y,
+  /// si se había registrado, se borra el gasto.
+  Future<void> undoHabitualDecision(
+          {required int templateId, required DateTime day}) =>
+      transaction(() async {
+        final row = await (select(habitualOccurrences)
+              ..where(
+                  (o) => o.templateId.equals(templateId) & o.date.equals(day)))
+            .getSingleOrNull();
+        if (row == null) return;
+        await (delete(habitualOccurrences)
+              ..where(
+                  (o) => o.templateId.equals(templateId) & o.date.equals(day)))
+            .go();
+        if (row.transactionId != null) {
+          await deleteTransaction(row.transactionId!);
+        }
+      });
+
+  Future<bool> _habitualDecided(int templateId, DateTime day) async =>
+      await (select(habitualOccurrences)
+            ..where(
+                (o) => o.templateId.equals(templateId) & o.date.equals(day)))
+          .getSingleOrNull() !=
+      null;
+
   // --- Metas de ahorro (RF13/RF14/RF19) -----------------------------------
 
   Stream<List<SavingsGoal>> watchSavingsGoals() => select(savingsGoals).watch();
@@ -1022,7 +1467,11 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Los gastos pagados con su ahorro (RF52) se conservan, pero sin meta:
+  /// desde ahí cuentan en el presupuesto de su mes.
   Future<void> deleteSavingsGoal(int id) => transaction(() async {
+        await (update(transactions)..where((t) => t.fundedByGoalId.equals(id)))
+            .write(const TransactionsCompanion(fundedByGoalId: Value(null)));
         await (delete(savingsContributions)..where((c) => c.goalId.equals(id)))
             .go();
         await (delete(savingsQuickAdds)..where((q) => q.goalId.equals(id)))
@@ -1030,17 +1479,51 @@ class AppDatabase extends _$AppDatabase {
         await (delete(savingsGoals)..where((g) => g.id.equals(id))).go();
       });
 
-  /// Total aportado por meta, reactivo — la barra de progreso se recalcula
-  /// sola con cada aporte nuevo.
-  Stream<Map<int, int>> watchTotalContributedByGoal() {
-    return select(savingsContributions).watch().map((rows) {
-      final totals = <int, int>{};
-      for (final r in rows) {
-        totals[r.goalId] = (totals[r.goalId] ?? 0) + r.amount;
-      }
-      return totals;
-    });
+  /// Saldo por meta (aportes menos lo usado en gastos, RF52), reactivo: la
+  /// barra de progreso se recalcula sola con cada aporte o uso.
+  Stream<Map<int, int>> watchGoalBalances() {
+    return customSelect(
+      'SELECT g.id AS id, '
+      'COALESCE((SELECT SUM(c.amount) FROM savings_contributions c '
+      'WHERE c.goal_id = g.id), 0) - '
+      'COALESCE((SELECT SUM(t.amount) FROM transactions t '
+      'WHERE t.funded_by_goal_id = g.id), 0) AS balance '
+      'FROM savings_goals g',
+      readsFrom: {savingsGoals, savingsContributions, transactions},
+    ).watch().map((rows) => {
+          for (final r in rows) r.read<int>('id'): r.read<int>('balance'),
+        });
   }
+
+  /// RF52: gastos pagados con el ahorro de [goalId], del más reciente.
+  Stream<List<Transaction>> watchGoalSpending(int goalId) =>
+      (select(transactions)
+            ..where((t) => t.fundedByGoalId.equals(goalId))
+            ..orderBy([(t) => OrderingTerm.desc(t.date)]))
+          .watch();
+
+  /// RF52: registra un gasto pagado con el ahorro de [goalId]. Falla si el
+  /// monto supera el saldo de la meta. Devuelve el id del gasto.
+  Future<int> spendFromGoal({
+    required int goalId,
+    required String categoryId,
+    required int amount,
+    required DateTime date,
+    String note = '',
+  }) =>
+      transaction(() async {
+        final balance = (await watchGoalBalances().first)[goalId] ?? 0;
+        if (amount <= 0 || amount > balance) {
+          throw StateError('El monto supera el saldo de la meta');
+        }
+        return into(transactions).insert(TransactionsCompanion.insert(
+          categoryId: categoryId,
+          amount: amount,
+          date: date,
+          note: Value(note),
+          fundedByGoalId: Value(goalId),
+        ));
+      });
 
   Stream<List<SavingsContribution>> watchContributionsForGoal(int goalId) {
     return (select(savingsContributions)
@@ -1119,6 +1602,11 @@ class AppDatabase extends _$AppDatabase {
     return row?.value;
   }
 
+  Stream<String?> watchSetting(String key) =>
+      (select(appSettings)..where((s) => s.key.equals(key)))
+          .map((row) => row.value)
+          .watchSingleOrNull();
+
   Future<void> setSetting(String key, String value) {
     return into(appSettings).insertOnConflictUpdate(
         AppSettingsCompanion.insert(key: key, value: value));
@@ -1161,6 +1649,9 @@ class AppDatabase extends _$AppDatabase {
       'installmentPlans': (await select(installmentPlans).get())
           .map((r) => r.toJson())
           .toList(),
+      'habitualOccurrences': (await select(habitualOccurrences).get())
+          .map((r) => r.toJson())
+          .toList(),
       'appSettings':
           (await select(appSettings).get()).map((r) => r.toJson()).toList(),
     };
@@ -1174,11 +1665,13 @@ class AppDatabase extends _$AppDatabase {
       // fila referenciada falla.
       await delete(savingsQuickAdds).go();
       await delete(savingsContributions).go();
-      await delete(savingsGoals).go();
+      await delete(habitualOccurrences).go();
       await delete(transactions).go();
+      await delete(savingsGoals).go();
       await delete(installmentPlans).go();
-      await delete(paymentMethods).go();
+      // Antes que los métodos de pago: un gasto habitual (RF47) apunta a uno.
       await delete(recurringTemplates).go();
+      await delete(paymentMethods).go();
       await delete(quickExpenseTemplates).go();
       await delete(monthlyAdjustments).go();
       await delete(categoryBudgets).go();
@@ -1192,6 +1685,7 @@ class AppDatabase extends _$AppDatabase {
         // `iconKey` — sin este fallback, Category.fromJson revienta con un
         // cast de null a String en vez de restaurar con el ícono default.
         row.putIfAbsent('iconKey', () => 'category');
+        row.putIfAbsent('archived', () => false); // anteriores a RF53
         await into(categories)
             .insertOnConflictUpdate(Category.fromJson(row).toCompanion(false));
       }
@@ -1225,9 +1719,16 @@ class AppDatabase extends _$AppDatabase {
         await into(installmentPlans).insertOnConflictUpdate(
             InstallmentPlan.fromJson(row).toCompanion(false));
       }
-      // Plantillas, métodos y planes antes que gastos: un gasto apunta a ellos.
+      for (final row
+          in (data['savingsGoals'] as List).cast<Map<String, dynamic>>()) {
+        await into(savingsGoals).insertOnConflictUpdate(
+            SavingsGoal.fromJson(row).toCompanion(false));
+      }
+      // Plantillas, métodos, planes y metas antes que gastos: un gasto apunta
+      // a ellos.
       for (final row in (data['recurringTemplates'] as List)
           .cast<Map<String, dynamic>>()) {
+        row.putIfAbsent('mode', () => 'auto'); // anteriores a RF47
         await into(recurringTemplates).insertOnConflictUpdate(
             RecurringTemplate.fromJson(row).toCompanion(false));
       }
@@ -1236,6 +1737,12 @@ class AppDatabase extends _$AppDatabase {
         await into(transactions).insertOnConflictUpdate(
             Transaction.fromJson(row).toCompanion(false));
       }
+      // `?? []`: respaldos anteriores a RF47 no traen gastos habituales.
+      for (final row in (data['habitualOccurrences'] as List? ?? [])
+          .cast<Map<String, dynamic>>()) {
+        await into(habitualOccurrences).insertOnConflictUpdate(
+            HabitualOccurrence.fromJson(row).toCompanion(false));
+      }
       // `?? []`: respaldos hechos antes de agregar esta tabla no traen la
       // clave — restaurarlos no debe fallar, solo dejar los accesos rápidos
       // vacíos (el usuario los vuelve a crear).
@@ -1243,11 +1750,6 @@ class AppDatabase extends _$AppDatabase {
           .cast<Map<String, dynamic>>()) {
         await into(quickExpenseTemplates).insertOnConflictUpdate(
             QuickExpenseTemplate.fromJson(row).toCompanion(false));
-      }
-      for (final row
-          in (data['savingsGoals'] as List).cast<Map<String, dynamic>>()) {
-        await into(savingsGoals).insertOnConflictUpdate(
-            SavingsGoal.fromJson(row).toCompanion(false));
       }
       for (final row in (data['savingsContributions'] as List)
           .cast<Map<String, dynamic>>()) {

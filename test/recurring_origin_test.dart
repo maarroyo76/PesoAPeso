@@ -24,7 +24,8 @@ void main() {
       id: 'vivienda',
       name: 'Vivienda',
       colorValue: 0xFF3B6B78,
-      iconKey: 'home');
+      iconKey: 'home',
+      archived: false);
   const template = RecurringTemplate(
     id: 7,
     categoryId: 'vivienda',
@@ -33,6 +34,7 @@ void main() {
     dayOfMonth: 5,
     active: true,
     lastGeneratedYearMonth: 202610,
+    mode: 'auto',
   );
 
   Future<void> pumpEdit(WidgetTester tester, Transaction tx) async {

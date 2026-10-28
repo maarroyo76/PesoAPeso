@@ -7,13 +7,16 @@ import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
+import '../../core/utils/billing_period.dart';
 import '../../core/utils/formatting.dart';
 import '../../core/utils/installments.dart';
 import '../../core/widgets/undo_snack_bar.dart';
+import '../../core/widgets/info_hint.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import '../metodos_pago/payment_method_labels.dart';
 import '../metodos_pago/payment_methods_screen.dart';
+import '../categorias/category_filters.dart';
 
 /// Guarda el gasto. Al registrar uno nuevo devuelve cómo deshacerlo (UX01);
 /// al editar devuelve null.
@@ -55,6 +58,7 @@ class ExpenseForm extends ConsumerStatefulWidget {
     this.focusAmount = false,
     required this.onSubmit,
     this.onSaved,
+    this.onRegistered,
   });
 
   final int? initialAmount;
@@ -79,9 +83,21 @@ class ExpenseForm extends ConsumerStatefulWidget {
   /// (para que la pantalla que aloja el formulario pueda cerrarse).
   final VoidCallback? onSaved;
 
+  /// UX04: se llama después de registrar un gasto nuevo y mostrar su aviso
+  /// "Deshacer", para que la hoja de registro se cierre.
+  final VoidCallback? onRegistered;
+
   @override
   ConsumerState<ExpenseForm> createState() => _ExpenseFormState();
 }
+
+/// Reglas para elegir categoría, junto al catálogo por defecto.
+const kCategoryUsageRules =
+    'Elige la categoría según para qué fue el gasto, no dónde compraste. '
+    'El pago del estado de cuenta de la tarjeta no es un gasto: cada compra '
+    'ya se anotó con su método y sus cuotas. El ahorro tampoco: regístralo '
+    'como aporte a una meta. Una boleta con varias cosas va en la categoría '
+    'de mayor monto.';
 
 class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   late final _amountController = TextEditingController(
@@ -136,7 +152,10 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
         await ref.read(transactionsRepositoryProvider).lastUsedCategoryId();
     if (!mounted || lastId == null) return;
     final categories = ref.read(categoriesProvider).valueOrNull;
-    if (categories != null && !categories.any((c) => c.id == lastId)) return;
+    if (categories != null &&
+        !selectableCategories(categories).any((c) => c.id == lastId)) {
+      return;
+    }
     if (_userPickedCategory) return;
     setState(() => _selectedCategoryId = lastId);
   }
@@ -252,6 +271,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
       showUndoSnackBar(ScaffoldMessenger.of(context),
           message: message, onUndo: undo);
     }
+    widget.onRegistered?.call();
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _justSubmitted = false);
     });
@@ -273,6 +293,30 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     if (n == null || n < kMinInstallments || n > kMaxInstallments) return null;
     return InstallmentChoice(
         count: n, amountIsPerInstallment: _amountIsPerInstallment);
+  }
+
+  /// RF33: con una tarjeta de crédito que tiene día de facturación, en qué
+  /// estado de cuenta cae la compra de la fecha elegida.
+  List<Widget> _billingPeriodHint() {
+    final methods = ref.watch(paymentMethodsProvider).valueOrNull ?? const [];
+    final card =
+        methods.where((m) => m.id == _selectedPaymentMethodId).firstOrNull;
+    final billingDay = card?.billingDay;
+    if (card == null || card.kind != kPaymentKindCredit || billingDay == null) {
+      return const [];
+    }
+    final period = billingPeriodFor(_selectedDate,
+        billingDay: billingDay, dueDay: card.dueDay);
+    final fmt = DateFormat("d 'de' MMMM", 'es_CL');
+    return [
+      const SizedBox(height: 8),
+      Text(
+        'Entra en el estado de cuenta que cierra el '
+        '${fmt.format(period.closing)}'
+        '${period.due == null ? '' : ', con pago el ${fmt.format(period.due!)}'}.',
+        style: TextStyle(fontSize: 12, color: context.colors.inkSoft),
+      ),
+    ];
   }
 
   /// El método elegido, o null si ya no existe (se borró mientras tanto).
@@ -321,7 +365,9 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     return categoriesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => LoadError(err),
-      data: (categories) {
+      data: (all) {
+        final categories =
+            selectableCategories(all, keep: widget.initialCategoryId);
         if (categories.isEmpty) {
           return const Center(
               child: Text('No hay categorías configuradas todavía.'));
@@ -373,7 +419,18 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                 ],
               ),
             ),
-            Text('Categoría', style: _labelStyle),
+            // Reglas de uso del catálogo, como ayuda al elegir categoría.
+            InfoTooltip(
+              message: kCategoryUsageRules,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Categoría', style: _labelStyle),
+                  const SizedBox(width: 4),
+                  const InfoIcon(),
+                ],
+              ),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -424,13 +481,14 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
             const SizedBox(height: 16),
             Text('Pagado con', style: _labelStyle),
             const SizedBox(height: 8),
-            _PaymentMethodPicker(
+            PaymentMethodPicker(
               selectedId: _selectedPaymentMethodId,
               onSelected: (id) => setState(() {
                 _selectedPaymentMethodId = id;
                 _userPickedPaymentMethod = true;
               }),
             ),
+            ..._billingPeriodHint(),
             if (_installmentsEnabled) ...[
               const SizedBox(height: 12),
               _installmentsField(),
@@ -658,10 +716,11 @@ class ExpenseCategoryChip extends StatelessWidget {
 }
 
 /// RF32: selector de método de pago. "Sin especificar" siempre está, para
-/// no obligar a elegir; sin métodos creados, ofrece crear el primero.
-class _PaymentMethodPicker extends ConsumerWidget {
-  const _PaymentMethodPicker(
-      {required this.selectedId, required this.onSelected});
+/// no obligar a elegir; sin métodos creados, ofrece crear el primero. Lo usa
+/// también el editor de gastos habituales (RF47).
+class PaymentMethodPicker extends ConsumerWidget {
+  const PaymentMethodPicker(
+      {super.key, required this.selectedId, required this.onSelected});
   final int? selectedId;
   final ValueChanged<int?> onSelected;
 

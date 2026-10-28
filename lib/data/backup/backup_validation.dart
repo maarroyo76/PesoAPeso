@@ -4,7 +4,11 @@
 /// v2 (RNF19): agrega `paymentMethods`, `installmentPlans` y en
 /// `transactions` el método de pago y el plan de cuotas.
 /// Los respaldos v1 se siguen aceptando: sus gastos quedan sin método.
-const kBackupFormatVersion = 2;
+///
+/// v3 (RF47): agrega `habitualOccurrences` y en `recurringTemplates` el modo
+/// y los datos del gasto habitual. Una versión anterior de la app tomaría
+/// los gastos habituales por pagos mensuales, por eso sube la versión.
+const kBackupFormatVersion = 3;
 
 /// Tamaño máximo aceptado para un archivo de respaldo (un respaldo real pesa
 /// unos pocos MB incluso con años de gastos).
@@ -60,6 +64,7 @@ void validateBackupData(Object? decoded) {
     'monthlyAdjustments',
     'paymentMethods',
     'installmentPlans',
+    'habitualOccurrences',
     'appSettings',
   ];
 
@@ -121,4 +126,13 @@ void validateBackupData(Object? decoded) {
   checkRefs('installmentPlans', 'paymentMethodId', paymentMethodIds);
   checkRefs('installmentPlans', 'categoryId', categoryIds);
   checkRefs('transactions', 'installmentPlanId', planIds, nullable: true);
+  checkRefs('transactions', 'fundedByGoalId', goalIds, nullable: true);
+  checkRefs('recurringTemplates', 'paymentMethodId', paymentMethodIds,
+      nullable: true);
+  final transactionIds = {
+    for (final r in rows('transactions', mustExist: true)) r['id']
+  };
+  checkRefs('habitualOccurrences', 'templateId', templateIds);
+  checkRefs('habitualOccurrences', 'transactionId', transactionIds,
+      nullable: true);
 }

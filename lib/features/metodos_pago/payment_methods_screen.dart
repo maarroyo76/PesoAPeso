@@ -376,8 +376,8 @@ Future<void> _confirmDelete(
         title: Text('No se puede eliminar',
             style: TextStyle(fontSize: 16, color: context.colors.ink)),
         content: Text(
-          '"${method.alias}" tiene gastos asociados. Cámbiales el método de '
-          'pago o elimínalos primero.',
+          '"${method.alias}" tiene gastos o gastos habituales asociados. '
+          'Cámbiales el método de pago o elimínalos primero.',
           style: TextStyle(color: context.colors.inkSoft),
         ),
         actions: [

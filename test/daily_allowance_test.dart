@@ -64,10 +64,12 @@ void main() {
           id: 'ocio',
           name: 'Ocio',
           colorValue: 0xFF6B3F5C,
-          iconKey: 'theaters');
+          iconKey: 'theaters',
+          archived: false);
       await tester.pumpWidget(ProviderScope(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
+          settingProvider.overrideWith((ref, key) => Stream.value(null)),
           paymentMethodsProvider
               .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
           categoriesProvider.overrideWith((ref) => Stream.value([category])),
@@ -92,6 +94,8 @@ void main() {
               .overrideWith((ref) => Stream.value(<MonthlyAdjustment>[])),
           monthContributedProvider
               .overrideWith((ref, m) => Stream.value(m == month ? saved : 0)),
+          recurringTemplatesProvider
+              .overrideWith((ref) => Stream.value(<RecurringTemplate>[])),
         ],
         child: const MaterialApp(home: Scaffold(body: ResumenScreen())),
       ));
