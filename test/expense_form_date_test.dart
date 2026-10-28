@@ -47,6 +47,7 @@ void main() {
                 required note,
                 required recurring,
                 required paymentMethodId,
+                required installments,
               }) async =>
                   null,
             ),
@@ -88,6 +89,7 @@ void main() {
                 required note,
                 required recurring,
                 required paymentMethodId,
+                required installments,
               }) async {
                 onSubmit();
                 return null;

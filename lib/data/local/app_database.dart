@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:meta/meta.dart';
 
+import '../../core/utils/installments.dart';
 import '../backup/backup_validation.dart';
 import 'connection.dart';
 
@@ -93,6 +94,30 @@ class PaymentMethods extends Table {
       ];
 }
 
+/// RF34: compra en cuotas con tarjeta de crédito. Cada cuota es un gasto
+/// normal (Transactions con `installmentPlanId`), generado al crear el plan:
+/// así Resumen, Presupuestos y Estadísticas las cuentan sin lógica especial,
+/// y lo comprometido en los meses siguientes (RF36) se ve desde el primer día.
+class InstallmentPlans extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get paymentMethodId => integer()();
+  TextColumn get categoryId => text()();
+  TextColumn get note => text().withDefault(const Constant(''))();
+  IntColumn get totalAmount => integer()();
+  IntColumn get installmentCount => integer()();
+  DateTimeColumn get purchaseDate => dateTime()();
+
+  /// RF35: prepagado; las cuotas futuras se reemplazaron por un solo pago.
+  BoolColumn get prepaid => boolean().withDefault(const Constant(false))();
+
+  @override
+  List<String> get customConstraints => [
+        'FOREIGN KEY (payment_method_id) REFERENCES payment_methods (id)',
+        'FOREIGN KEY (category_id) REFERENCES categories (id)',
+        'CHECK (installment_count BETWEEN 2 AND 48)',
+      ];
+}
+
 class Transactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get categoryId => text()();
@@ -110,12 +135,18 @@ class Transactions extends Table {
   /// anteriores a v10 (RNF18) y los que el usuario no asignó.
   IntColumn get paymentMethodId => integer().nullable()();
 
+  /// RF34: plan de cuotas al que pertenece, y qué cuota es (desde 1). El
+  /// prepago (RF35) también lleva el plan, pero sin número de cuota.
+  IntColumn get installmentPlanId => integer().nullable()();
+  IntColumn get installmentNumber => integer().nullable()();
+
   @override
   List<String> get customConstraints => [
         'FOREIGN KEY (category_id) REFERENCES categories (id)',
         'FOREIGN KEY (recurring_template_id) REFERENCES recurring_templates (id) '
             'ON DELETE SET NULL',
         'FOREIGN KEY (payment_method_id) REFERENCES payment_methods (id)',
+        'FOREIGN KEY (installment_plan_id) REFERENCES installment_plans (id)',
       ];
 }
 
@@ -256,6 +287,7 @@ final _defaultQuickExpenseTemplatesForNewInstall = [
   QuickExpenseTemplates,
   MonthlyAdjustments,
   PaymentMethods,
+  InstallmentPlans,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openDatabaseConnection());
@@ -265,6 +297,13 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   int get schemaVersion => 10;
+
+  /// Columnas de Transactions agregadas en v10.
+  List<GeneratedColumn> get _transactionColumnsV10 => [
+        transactions.paymentMethodId,
+        transactions.installmentPlanId,
+        transactions.installmentNumber,
+      ];
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -453,7 +492,7 @@ class AppDatabase extends _$AppDatabase {
             // ignore: experimental_member_use
             await m.alterTable(TableMigration(transactions, newColumns: [
               transactions.recurringTemplateId,
-              transactions.paymentMethodId,
+              ..._transactionColumnsV10,
             ]));
             // ignore: experimental_member_use
             await m.alterTable(TableMigration(quickExpenseTemplates));
@@ -478,17 +517,19 @@ class AppDatabase extends _$AppDatabase {
             ''');
           }
           if (from < 10) {
-            // RF31/RF32: métodos de pago. RNF18: los gastos existentes no
-            // cambian; quedan con método null ("Sin especificar"), sin
-            // inventarles un efectivo que el usuario nunca registró.
+            // RF31/RF32: métodos de pago; RF34: cuotas. RNF18: los gastos
+            // existentes no cambian; quedan con método null ("Sin
+            // especificar"), sin inventarles un efectivo que el usuario nunca
+            // registró, y sin plan de cuotas.
             await m.createTable(paymentMethods);
+            await m.createTable(installmentPlans);
             // Si pasamos por `from < 9`, la tabla ya se reconstruyó con la
             // columna (ver arriba). La clave foránea es de tabla, así que hay
             // que reconstruirla: `addColumn` agregaría la columna sin ella.
             if (from >= 9) {
               // ignore: experimental_member_use
               await m.alterTable(TableMigration(transactions,
-                  newColumns: [transactions.paymentMethodId]));
+                  newColumns: _transactionColumnsV10));
             }
           }
         },
@@ -541,10 +582,134 @@ class AppDatabase extends _$AppDatabase {
   Future<int> countTransactionsForPaymentMethod(int id) =>
       _countWhere(transactions, transactions.paymentMethodId.equals(id));
 
+  Future<int> countInstallmentPlansForPaymentMethod(int id) => _countWhere(
+      installmentPlans, installmentPlans.paymentMethodId.equals(id));
+
   /// RF31: como con las categorías, la UI solo lo permite sin gastos
   /// asociados; la clave foránea lo impide igual si se intentara.
   Future<void> deletePaymentMethod(int id) =>
       (delete(paymentMethods)..where((p) => p.id.equals(id))).go();
+
+  // --- Cuotas (RF34/RF35/RF36) ---------------------------------------------
+
+  Stream<List<InstallmentPlan>> watchInstallmentPlans() =>
+      (select(installmentPlans)
+            ..orderBy([(p) => OrderingTerm.desc(p.purchaseDate)]))
+          .watch();
+
+  /// Todos los gastos que pertenecen a un plan de cuotas (cuotas y prepagos).
+  Stream<List<Transaction>> watchInstallmentTransactions() =>
+      (select(transactions)..where((t) => t.installmentPlanId.isNotNull()))
+          .watch();
+
+  /// RF34: crea el plan y sus [count] cuotas de una vez, cada una en su mes.
+  /// Devuelve el id del plan.
+  Future<int> createInstallmentPlan({
+    required int paymentMethodId,
+    required String categoryId,
+    required String note,
+    required int totalAmount,
+    required int count,
+    required DateTime purchaseDate,
+  }) =>
+      transaction(() async {
+        final planId = await into(installmentPlans).insert(
+          InstallmentPlansCompanion.insert(
+            paymentMethodId: paymentMethodId,
+            categoryId: categoryId,
+            note: Value(note),
+            totalAmount: totalAmount,
+            installmentCount: count,
+            purchaseDate: purchaseDate,
+          ),
+        );
+        final amounts = installmentAmounts(totalAmount, count);
+        for (var k = 1; k <= count; k++) {
+          await into(transactions).insert(TransactionsCompanion.insert(
+            categoryId: categoryId,
+            amount: amounts[k - 1],
+            date: installmentDate(purchaseDate, k),
+            note: Value(installmentNote(note, k, count)),
+            paymentMethodId: Value(paymentMethodId),
+            installmentPlanId: Value(planId),
+            installmentNumber: Value(k),
+          ));
+        }
+        return planId;
+      });
+
+  /// RF35: cambia la categoría y la nota del plan y de todas sus cuotas.
+  Future<void> updateInstallmentPlanInfo(int planId,
+          {required String categoryId, required String note}) =>
+      transaction(() async {
+        final plan = await (select(installmentPlans)
+              ..where((p) => p.id.equals(planId)))
+            .getSingle();
+        await (update(installmentPlans)..where((p) => p.id.equals(planId)))
+            .write(InstallmentPlansCompanion(
+                categoryId: Value(categoryId), note: Value(note)));
+        final rows = await (select(transactions)
+              ..where((t) => t.installmentPlanId.equals(planId)))
+            .get();
+        for (final t in rows) {
+          final k = t.installmentNumber;
+          await (update(transactions)..where((x) => x.id.equals(t.id)))
+              .write(TransactionsCompanion(
+            categoryId: Value(categoryId),
+            note: k == null
+                ? const Value.absent()
+                : Value(installmentNote(note, k, plan.installmentCount)),
+          ));
+        }
+      });
+
+  /// RF35: prepagar. Las cuotas ya pasadas (hasta hoy) quedan intactas; las
+  /// futuras se reemplazan por un solo gasto de hoy por su suma, porque esa
+  /// plata se paga ahora y debe contar en el presupuesto de este mes.
+  Future<void> prepayInstallmentPlan(int planId, {DateTime? today}) =>
+      transaction(() async {
+        final now = today ?? DateTime.now();
+        final endOfToday = DateTime(now.year, now.month, now.day + 1);
+        final plan = await (select(installmentPlans)
+              ..where((p) => p.id.equals(planId)))
+            .getSingle();
+        final future = await (select(transactions)
+              ..where((t) =>
+                  t.installmentPlanId.equals(planId) &
+                  t.installmentNumber.isNotNull() &
+                  t.date.isBiggerOrEqualValue(endOfToday))
+              ..orderBy([(t) => OrderingTerm.asc(t.installmentNumber)]))
+            .get();
+        if (future.isNotEmpty) {
+          await (delete(transactions)
+                ..where((t) => t.id.isIn(future.map((t) => t.id))))
+              .go();
+          final first = future.first.installmentNumber!;
+          final n = plan.installmentCount;
+          final label = first == n
+              ? 'Prepago cuota $n de $n'
+              : 'Prepago cuotas $first a $n de $n';
+          await into(transactions).insert(TransactionsCompanion.insert(
+            categoryId: plan.categoryId,
+            amount: future.fold<int>(0, (a, t) => a + t.amount),
+            date: now,
+            note: Value(plan.note.isEmpty ? label : '${plan.note} · $label'),
+            paymentMethodId: Value(plan.paymentMethodId),
+            installmentPlanId: Value(planId),
+          ));
+        }
+        await (update(installmentPlans)..where((p) => p.id.equals(planId)))
+            .write(const InstallmentPlansCompanion(prepaid: Value(true)));
+      });
+
+  /// Elimina el plan con todas sus cuotas (también las ya pagadas).
+  Future<void> deleteInstallmentPlan(int planId) => transaction(() async {
+        await (delete(transactions)
+              ..where((t) => t.installmentPlanId.equals(planId)))
+            .go();
+        await (delete(installmentPlans)..where((p) => p.id.equals(planId)))
+            .go();
+      });
 
   /// RF32: método del último gasto registrado que tiene uno, para
   /// proponerlo por defecto. Null si nunca se usó uno.
@@ -597,6 +762,10 @@ class AppDatabase extends _$AppDatabase {
   Future<int> countRecurringTemplatesForCategory(String categoryId) =>
       _countWhere(
           recurringTemplates, recurringTemplates.categoryId.equals(categoryId));
+
+  Future<int> countInstallmentPlansForCategory(String categoryId) =>
+      _countWhere(
+          installmentPlans, installmentPlans.categoryId.equals(categoryId));
 
   Future<int> countQuickExpenseTemplatesForCategory(String categoryId) =>
       _countWhere(quickExpenseTemplates,
@@ -989,6 +1158,9 @@ class AppDatabase extends _$AppDatabase {
           .toList(),
       'paymentMethods':
           (await select(paymentMethods).get()).map((r) => r.toJson()).toList(),
+      'installmentPlans': (await select(installmentPlans).get())
+          .map((r) => r.toJson())
+          .toList(),
       'appSettings':
           (await select(appSettings).get()).map((r) => r.toJson()).toList(),
     };
@@ -1004,6 +1176,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(savingsContributions).go();
       await delete(savingsGoals).go();
       await delete(transactions).go();
+      await delete(installmentPlans).go();
       await delete(paymentMethods).go();
       await delete(recurringTemplates).go();
       await delete(quickExpenseTemplates).go();
@@ -1047,7 +1220,12 @@ class AppDatabase extends _$AppDatabase {
         await into(paymentMethods).insertOnConflictUpdate(
             PaymentMethod.fromJson(row).toCompanion(false));
       }
-      // Plantillas y métodos antes que gastos: un gasto apunta a ambos.
+      for (final row in (data['installmentPlans'] as List? ?? [])
+          .cast<Map<String, dynamic>>()) {
+        await into(installmentPlans).insertOnConflictUpdate(
+            InstallmentPlan.fromJson(row).toCompanion(false));
+      }
+      // Plantillas, métodos y planes antes que gastos: un gasto apunta a ellos.
       for (final row in (data['recurringTemplates'] as List)
           .cast<Map<String, dynamic>>()) {
         await into(recurringTemplates).insertOnConflictUpdate(

@@ -27,6 +27,7 @@ class CategoriesRepository {
   Future<bool> canDeleteCategory(String id) async {
     if ((await _db.countTransactionsForCategory(id)) != 0) return false;
     if ((await _db.countRecurringTemplatesForCategory(id)) != 0) return false;
+    if ((await _db.countInstallmentPlansForCategory(id)) != 0) return false;
     if ((await _db.countQuickExpenseTemplatesForCategory(id)) != 0) {
       return false;
     }

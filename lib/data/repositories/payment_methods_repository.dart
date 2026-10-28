@@ -49,10 +49,11 @@ class PaymentMethodsRepository {
         ),
       );
 
-  /// RF31: false si el método tiene gastos asociados, igual que las
-  /// categorías.
+  /// RF31: false si el método tiene gastos o compras en cuotas asociados,
+  /// igual que las categorías.
   Future<bool> canDeletePaymentMethod(int id) async =>
-      await _db.countTransactionsForPaymentMethod(id) == 0;
+      await _db.countTransactionsForPaymentMethod(id) == 0 &&
+      await _db.countInstallmentPlansForPaymentMethod(id) == 0;
 
   Future<void> deletePaymentMethod(int id) => _db.deletePaymentMethod(id);
 

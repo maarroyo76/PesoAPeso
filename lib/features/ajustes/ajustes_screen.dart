@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../categorias/categorias_screen.dart';
+import '../cuotas/cuotas_screen.dart';
 import '../escaner/prueba_boletas_screen.dart';
 import '../metodos_pago/payment_methods_screen.dart';
 import '../recurrentes/recurrentes_screen.dart';
@@ -35,6 +36,13 @@ class AjustesScreen extends StatelessWidget {
             title: 'Métodos de pago',
             subtitle: 'Efectivo, débito y tarjetas de crédito',
             screen: PaymentMethodsScreen(),
+          ),
+          Divider(height: 1, indent: 72),
+          _SettingsTile(
+            icon: Icons.calendar_view_month_outlined,
+            title: 'Compras en cuotas',
+            subtitle: 'Cuotas pagadas y pendientes de cada compra',
+            screen: CuotasScreen(),
           ),
           Divider(height: 1, indent: 72),
           _SettingsTile(

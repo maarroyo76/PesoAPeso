@@ -15,6 +15,7 @@ import 'package:peso_a_peso/data/local/app_database.dart';
 import 'package:peso_a_peso/features/agregar_gasto/agregar_screen.dart';
 import 'package:peso_a_peso/features/ajustes/ajustes_screen.dart';
 import 'package:peso_a_peso/features/categorias/categorias_screen.dart';
+import 'package:peso_a_peso/features/cuotas/cuotas_screen.dart';
 import 'package:peso_a_peso/features/estadisticas/estadisticas_screen.dart';
 import 'package:peso_a_peso/features/metodos_pago/payment_methods_screen.dart';
 import 'package:peso_a_peso/features/metas/metas_screen.dart';
@@ -40,6 +41,7 @@ const mainScreens = [
   ('Recurrentes', RecurrentesScreen()),
   ('Respaldo', RespaldoScreen()),
   ('Métodos de pago', PaymentMethodsScreen()),
+  ('Compras en cuotas', CuotasScreen()),
 ];
 
 const categories = [
@@ -100,6 +102,34 @@ const paymentMethods = [
   PaymentMethod(id: 2, alias: 'Efectivo', kind: 'cash', colorValue: 0xFF2F6F4E),
 ];
 
+/// Compra de 6 cuotas que empezó el mes pasado: 2 pagadas y 4 pendientes.
+final installmentPlans = [
+  InstallmentPlan(
+    id: 1,
+    paymentMethodId: 1,
+    categoryId: 'transporte',
+    note: 'Neumáticos',
+    totalAmount: 360000,
+    installmentCount: 6,
+    purchaseDate: DateTime(month.year, month.month - 1, 1),
+    prepaid: false,
+  ),
+];
+final installmentTxs = [
+  for (var k = 1; k <= 6; k++)
+    Transaction(
+      id: 900 + k,
+      categoryId: 'transporte',
+      amount: 60000,
+      date: DateTime(month.year, month.month - 2 + k, 1),
+      note: 'Neumáticos · Cuota $k de 6',
+      isRecurring: false,
+      paymentMethodId: 1,
+      installmentPlanId: 1,
+      installmentNumber: k,
+    ),
+];
+
 const recurring = [
   RecurringTemplate(
     id: 1,
@@ -147,6 +177,10 @@ Future<Future<void> Function()> pumpMainScreen(
       monthContributedProvider.overrideWith((ref, m) => Stream.value(30000)),
       paymentMethodsProvider
           .overrideWith((ref) => Stream.value(paymentMethods)),
+      installmentPlansProvider
+          .overrideWith((ref) => Stream.value(installmentPlans)),
+      installmentTransactionsProvider
+          .overrideWith((ref) => Stream.value(installmentTxs)),
       quickExpenseTemplatesProvider.overrideWith((ref) => Stream.value(quick)),
       recurringTemplatesProvider.overrideWith((ref) => Stream.value(recurring)),
     ],

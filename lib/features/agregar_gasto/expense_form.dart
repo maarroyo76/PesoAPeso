@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
+import '../../core/utils/installments.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
@@ -23,7 +24,20 @@ typedef ExpenseFormSubmit = Future<UndoAction?> Function({
   required String note,
   required bool recurring,
   required int? paymentMethodId,
+  required InstallmentChoice? installments,
 });
+
+/// RF34: compra en cuotas: cuántas, y si el monto ingresado es el total de
+/// la compra o el valor de cada cuota.
+class InstallmentChoice {
+  const InstallmentChoice(
+      {required this.count, required this.amountIsPerInstallment});
+  final int count;
+  final bool amountIsPerInstallment;
+
+  /// Total de la compra a partir del monto ingresado en el formulario.
+  int totalFor(int amount) => amountIsPerInstallment ? amount * count : amount;
+}
 
 /// Formulario de monto/categoría/fecha/nota/recurrente, usado tanto para
 /// registrar un gasto manual (AgregarScreen) como para editar uno existente
@@ -75,6 +89,8 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
           ? ''
           : formatAmountInput(widget.initialAmount!));
   late final _noteController = TextEditingController(text: widget.initialNote);
+  final _installmentsController = TextEditingController();
+  bool _amountIsPerInstallment = false;
   final _amountFocus = FocusNode();
   String? _selectedCategoryId;
   late DateTime _selectedDate = widget.initialDate ?? DateTime.now();
@@ -141,6 +157,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
+    _installmentsController.dispose();
     _amountFocus.dispose();
     super.dispose();
   }
@@ -149,6 +166,19 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     if (_submitting) return;
     final amount = parsePositiveAmount(_amountController.text);
     final categoryId = _selectedCategoryId;
+    if (_installmentsEnabled &&
+        _installmentsController.text.isNotEmpty &&
+        _installmentChoice() == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+              'Las cuotas van de $kMinInstallments a $kMaxInstallments. '
+              'Déjalo vacío si es en una sola cuota.'),
+          backgroundColor: context.colors.rust,
+        ),
+      );
+      return;
+    }
     if (amount == null || categoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -192,6 +222,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
       note: _noteController.text,
       recurring: _isRecurring,
       paymentMethodId: _validPaymentMethodId(),
+      installments: _installmentChoice(),
     );
     if (!mounted) return;
 
@@ -210,6 +241,7 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     HapticFeedback.lightImpact();
     _amountController.clear();
     _noteController.clear();
+    _installmentsController.clear();
     setState(() {
       _isRecurring = false;
       _selectedDate = DateTime.now();
@@ -223,6 +255,24 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _justSubmitted = false);
     });
+  }
+
+  /// RF34: las cuotas solo se ofrecen al registrar un gasto nuevo con un
+  /// método de crédito.
+  bool get _installmentsEnabled {
+    if (widget.isEditing) return false;
+    final id = _validPaymentMethodId();
+    final methods = ref.read(paymentMethodsProvider).valueOrNull ?? const [];
+    return methods.any((m) => m.id == id && m.kind == kPaymentKindCredit);
+  }
+
+  /// Las cuotas ingresadas, o null si no hay (o el número no es válido).
+  InstallmentChoice? _installmentChoice() {
+    if (!_installmentsEnabled) return null;
+    final n = int.tryParse(_installmentsController.text);
+    if (n == null || n < kMinInstallments || n > kMaxInstallments) return null;
+    return InstallmentChoice(
+        count: n, amountIsPerInstallment: _amountIsPerInstallment);
   }
 
   /// El método elegido, o null si ya no existe (se borró mientras tanto).
@@ -304,6 +354,12 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                     child: TextField(
                       controller: _amountController,
                       focusNode: _amountFocus,
+                      // Actualiza el resumen de cuotas (RF34) al escribir.
+                      onChanged: (_) {
+                        if (_installmentsController.text.isNotEmpty) {
+                          setState(() {});
+                        }
+                      },
                       keyboardType: TextInputType.number,
                       inputFormatters: amountInputFormatters,
                       textInputAction: TextInputAction.next,
@@ -375,6 +431,10 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
                 _userPickedPaymentMethod = true;
               }),
             ),
+            if (_installmentsEnabled) ...[
+              const SizedBox(height: 12),
+              _installmentsField(),
+            ],
             const SizedBox(height: 16),
             Text('Nota (opcional)', style: _labelStyle),
             TextField(
@@ -391,7 +451,9 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
             // Al editar no se ofrece el switch: cambiar el flag no crea ni
             // borra la plantilla recurrente, solo desincronizaría ambos. Las
             // plantillas se administran en "Gastos recurrentes".
-            if (!widget.isEditing) ...[
+            // Una compra en cuotas ya genera sus gastos de los meses
+            // siguientes; no puede ser además recurrente.
+            if (!widget.isEditing && _installmentChoice() == null) ...[
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Gasto recurrente',
@@ -448,6 +510,65 @@ class _ExpenseFormState extends ConsumerState<ExpenseForm> {
           ],
         );
       },
+    );
+  }
+
+  /// RF34: número de cuotas y si el monto es el total o el valor cuota.
+  Widget _installmentsField() {
+    final choice = _installmentChoice();
+    final amount = parsePositiveAmount(_amountController.text);
+    String? summary;
+    if (choice != null && amount != null) {
+      final total = choice.totalFor(amount);
+      final amounts = installmentAmounts(total, choice.count);
+      summary = '${choice.count} cuotas de ${currencyFmt.format(amounts.first)}'
+          '${amounts.last != amounts.first ? ' (la última de ${currencyFmt.format(amounts.last)})' : ''}'
+          ' · total ${currencyFmt.format(total)}';
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 140,
+              child: TextField(
+                controller: _installmentsController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Cuotas',
+                  hintText: 'Sin cuotas',
+                  border: UnderlineInputBorder(),
+                ),
+              ),
+            ),
+            if (choice != null)
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Monto total')),
+                  ButtonSegment(value: true, label: Text('Valor cuota')),
+                ],
+                selected: {_amountIsPerInstallment},
+                onSelectionChanged: (v) =>
+                    setState(() => _amountIsPerInstallment = v.single),
+              ),
+          ],
+        ),
+        if (summary != null) ...[
+          const SizedBox(height: 6),
+          Text(summary,
+              style: TextStyle(fontSize: 12, color: context.colors.inkSoft)),
+        ],
+      ],
     );
   }
 

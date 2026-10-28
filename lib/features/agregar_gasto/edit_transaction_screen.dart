@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/budget_alert.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
+import '../cuotas/cuotas_screen.dart' show showInstallmentPlanSheet;
 import '../recurrentes/recurrentes_screen.dart' show showRecurringEditor;
 import 'expense_form.dart';
 
@@ -47,6 +48,8 @@ class EditTransactionScreen extends ConsumerWidget {
               if (transaction.recurringTemplateId != null)
                 _RecurringOriginCard(
                     templateId: transaction.recurringTemplateId!),
+              if (transaction.installmentPlanId != null)
+                _InstallmentOriginCard(transaction: transaction),
               ExpenseForm(
                 isEditing: true,
                 initialAmount: transaction.amount,
@@ -63,6 +66,7 @@ class EditTransactionScreen extends ConsumerWidget {
                   required note,
                   required recurring,
                   required paymentMethodId,
+                  required installments,
                 }) async {
                   await ref
                       .read(transactionsRepositoryProvider)
@@ -128,6 +132,63 @@ class _RecurringOriginCard extends ConsumerWidget {
                 template: template),
             child: Text('Ver recurrente',
                 style: TextStyle(color: context.colors.ink)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// RF35: una cuota lleva a su compra en cuotas. Editar aquí solo cambia esta
+/// cuota; la categoría y la nota de todas se cambian desde la compra.
+class _InstallmentOriginCard extends ConsumerWidget {
+  const _InstallmentOriginCard({required this.transaction});
+  final Transaction transaction;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final plan = ref
+        .watch(installmentPlansProvider)
+        .valueOrNull
+        ?.where((p) => p.id == transaction.installmentPlanId)
+        .firstOrNull;
+    if (plan == null) return const SizedBox.shrink();
+    final k = transaction.installmentNumber;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: context.colors.rule),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_view_month_outlined,
+              size: 18, color: context.colors.inkSoft),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              k == null
+                  ? 'Prepago de una compra en ${plan.installmentCount} cuotas.'
+                  : 'Cuota $k de ${plan.installmentCount} de una compra en '
+                      'cuotas. Los cambios aquí solo afectan esta cuota.',
+              style: TextStyle(fontSize: 12, color: context.colors.inkSoft),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              await showInstallmentPlanSheet(context, plan.id);
+              // Si se eliminó la compra, esta cuota ya no existe.
+              final stillThere = ref
+                      .read(installmentPlansProvider)
+                      .valueOrNull
+                      ?.any((p) => p.id == plan.id) ??
+                  true;
+              if (!stillThere && context.mounted) Navigator.of(context).pop();
+            },
+            child:
+                Text('Ver compra', style: TextStyle(color: context.colors.ink)),
           ),
         ],
       ),

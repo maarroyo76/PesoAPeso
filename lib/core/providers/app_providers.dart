@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/app_database.dart';
 import '../../data/repositories/backup_repository.dart';
 import '../../data/repositories/categories_repository.dart';
+import '../../data/repositories/installments_repository.dart';
 import '../../data/repositories/payment_methods_repository.dart';
 import '../../data/repositories/quick_expense_templates_repository.dart';
 import '../../data/repositories/recurring_templates_repository.dart';
@@ -85,6 +86,18 @@ final paymentMethodsRepositoryProvider = Provider<PaymentMethodsRepository>(
 /// RF31: métodos de pago, en el orden en que se crearon.
 final paymentMethodsProvider = StreamProvider(
     (ref) => ref.watch(paymentMethodsRepositoryProvider).watchPaymentMethods());
+
+final installmentsRepositoryProvider = Provider<InstallmentsRepository>(
+  (ref) => InstallmentsRepository(ref.watch(appDatabaseProvider)),
+);
+
+/// RF35: compras en cuotas, la más reciente primero.
+final installmentPlansProvider = StreamProvider(
+    (ref) => ref.watch(installmentsRepositoryProvider).watchPlans());
+
+/// Cuotas y prepagos de todos los planes (RF35/RF36).
+final installmentTransactionsProvider = StreamProvider((ref) =>
+    ref.watch(installmentsRepositoryProvider).watchInstallmentTransactions());
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(appDatabaseProvider)),

@@ -1,7 +1,8 @@
 /// Versión del formato que escribe `exportAllData`. Subirla al cambiar el
 /// formato de forma incompatible; un respaldo con versión mayor la rechaza.
 ///
-/// v2 (RNF19): agrega `paymentMethods` y `transactions.paymentMethodId`.
+/// v2 (RNF19): agrega `paymentMethods`, `installmentPlans` y en
+/// `transactions` el método de pago y el plan de cuotas.
 /// Los respaldos v1 se siguen aceptando: sus gastos quedan sin método.
 const kBackupFormatVersion = 2;
 
@@ -58,6 +59,7 @@ void validateBackupData(Object? decoded) {
     'quickExpenseTemplates',
     'monthlyAdjustments',
     'paymentMethods',
+    'installmentPlans',
     'appSettings',
   ];
 
@@ -91,6 +93,9 @@ void validateBackupData(Object? decoded) {
   final paymentMethodIds = {
     for (final r in rows('paymentMethods', mustExist: false)) r['id']
   };
+  final planIds = {
+    for (final r in rows('installmentPlans', mustExist: false)) r['id']
+  };
 
   void checkRefs(String table, String column, Set<Object?> valid,
       {bool nullable = false}) {
@@ -113,4 +118,7 @@ void validateBackupData(Object? decoded) {
   checkRefs('monthlyAdjustments', 'categoryId', categoryIds, nullable: true);
   checkRefs('transactions', 'paymentMethodId', paymentMethodIds,
       nullable: true);
+  checkRefs('installmentPlans', 'paymentMethodId', paymentMethodIds);
+  checkRefs('installmentPlans', 'categoryId', categoryIds);
+  checkRefs('transactions', 'installmentPlanId', planIds, nullable: true);
 }

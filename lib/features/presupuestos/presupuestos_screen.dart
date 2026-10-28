@@ -6,10 +6,12 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/amount_input.dart';
 import '../../core/utils/formatting.dart';
+import '../../core/utils/installments.dart';
 import '../../core/widgets/ledger_paper.dart';
 import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
+import '../cuotas/cuotas_screen.dart';
 
 class PresupuestosScreen extends ConsumerWidget {
   const PresupuestosScreen({super.key});
@@ -94,6 +96,7 @@ class PresupuestosScreen extends ConsumerWidget {
               onDelete: () => _confirmDeleteAdjustment(context, ref, a),
             ),
         ],
+        const _CommittedInstallments(),
         const SizedBox(height: 24),
         const SectionLabel('Presupuesto por categoría'),
         const SizedBox(height: 12),
@@ -557,6 +560,91 @@ class _BudgetRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// RF36: cuánto del presupuesto de los meses siguientes ya está
+/// comprometido en cuotas. Nada si no hay cuotas futuras.
+class _CommittedInstallments extends ConsumerWidget {
+  const _CommittedInstallments();
+
+  /// Meses que se muestran; el resto se suma en una sola línea.
+  static const _visibleMonths = 6;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final month = ref.watch(currentMonthProvider);
+    final txs = ref.watch(installmentTransactionsProvider).valueOrNull ?? [];
+    final byMonth = committedByMonth(txs.map((t) => (t.date, t.amount)), month);
+    if (byMonth.isEmpty) return const SizedBox.shrink();
+    final entries = byMonth.entries.toList();
+    final rest =
+        entries.skip(_visibleMonths).fold<int>(0, (a, e) => a + e.value);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionLabel('Comprometido en cuotas',
+              info: 'Cuotas de compras con tarjeta de crédito que caen en los '
+                  'próximos meses. Ya cuentan como gasto de esos meses.'),
+          const SizedBox(height: 8),
+          for (final e in entries.take(_visibleMonths))
+            _CommittedRow(
+              label: capitalizeMonth(e.key, monthFmt),
+              amount: e.value,
+              budget: ref.watch(monthTotalBudgetProvider(e.key)),
+            ),
+          if (rest > 0)
+            _CommittedRow(label: 'Meses siguientes', amount: rest, budget: 0),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              style: TextButton.styleFrom(
+                  foregroundColor: context.colors.ink,
+                  padding: EdgeInsets.zero),
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CuotasScreen())),
+              child: const Text('Ver compras en cuotas'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommittedRow extends StatelessWidget {
+  const _CommittedRow(
+      {required this.label, required this.amount, required this.budget});
+  final String label;
+  final int amount;
+
+  /// Presupuesto total de ese mes; 0 = no se muestra el porcentaje.
+  final int budget;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = budget > 0 ? ' · ${(amount / budget * 100).round()}%' : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: TextStyle(fontSize: 13, color: context.colors.ink)),
+          ),
+          Text(
+            '${currencyFmt.format(amount)}$pct',
+            style: appAmountTextStyle.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.colors.ink),
+          ),
+        ],
       ),
     );
   }

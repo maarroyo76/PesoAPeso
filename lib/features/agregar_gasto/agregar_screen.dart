@@ -220,7 +220,27 @@ class AgregarScreen extends ConsumerWidget {
             required note,
             required recurring,
             required paymentMethodId,
+            required installments,
           }) async {
+            // RF34: una compra en cuotas genera todas sus cuotas de una vez;
+            // deshacer la elimina completa.
+            if (installments != null && paymentMethodId != null) {
+              final repo = ref.read(installmentsRepositoryProvider);
+              final planId = await repo.createPlan(
+                paymentMethodId: paymentMethodId,
+                categoryId: categoryId,
+                note: note,
+                totalAmount: installments.totalFor(amount),
+                count: installments.count,
+                purchaseDate: date,
+              );
+              if (context.mounted) {
+                final alerts = await checkBudgetAlerts(ref,
+                    categoryId: categoryId, date: date);
+                if (context.mounted) showBudgetAlertBanner(context, alerts);
+              }
+              return () => repo.deletePlan(planId);
+            }
             final txRepo = ref.read(transactionsRepositoryProvider);
             final templatesRepo =
                 ref.read(recurringTemplatesRepositoryProvider);
