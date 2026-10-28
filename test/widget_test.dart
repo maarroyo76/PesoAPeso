@@ -1,5 +1,5 @@
 // Smoke test: la app arranca, muestra el onboarding (RF23) en una
-// instalación nueva, y tras omitirlo se ve el shell principal.
+// instalación nueva, y al terminarlo se ve el shell principal.
 //
 // Usa una base en memoria (igual que los otros tests) en vez de la conexión
 // real: AppDatabase() de producción abre un isolate de background + usa
@@ -31,7 +31,7 @@ void main() {
   });
 
   testWidgets(
-      'GastoAManoApp arranca, muestra el onboarding y tras omitirlo el shell principal',
+      'la app arranca con el onboarding y al terminarlo muestra el shell',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -45,17 +45,32 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Instalación nueva: primero se ve el onboarding, no el shell.
-    expect(find.text('PASO 1 DE 4'), findsOneWidget);
-    expect(find.text('Peso a Peso'), findsNothing);
+    // Instalación nueva: primero la bienvenida, no el shell.
+    expect(find.text('Empezar'), findsOneWidget);
+    expect(find.text('Restaurar respaldo'), findsOneWidget);
+    expect(find.text('Registrar'), findsNothing);
 
-    // Omitir los 4 pasos.
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('Omitir'));
-      await tester.pumpAndSettle();
-    }
+    await tester.tap(find.text('Empezar'));
+    await tester.pumpAndSettle();
+    expect(find.text('PASO 1 DE 3'), findsOneWidget);
 
-    expect(find.text('Peso a Peso'), findsOneWidget);
+    // Continuar sin monto no avanza: pide un monto o "Aún no sé".
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    expect(find.text('PASO 1 DE 3'), findsOneWidget);
+    await tester.tap(find.text('Aún no sé'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tus categorías'), findsOneWidget);
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tu primer gasto'), findsOneWidget);
+    await tester.tap(find.text('Lo hago después'));
+    await tester.pumpAndSettle();
+
+    // UX04: el shell con el botón central de registro.
+    expect(find.text('Registrar'), findsOneWidget);
 
     // Desmontar el árbol DENTRO del test (no dejárselo al teardown
     // automático): así los timers de limpieza de drift que dispara la

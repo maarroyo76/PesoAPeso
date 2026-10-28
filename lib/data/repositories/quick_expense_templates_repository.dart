@@ -8,6 +8,9 @@ class QuickExpenseTemplatesRepository {
   Stream<List<QuickExpenseTemplate>> watchAll() =>
       _db.watchQuickExpenseTemplates();
 
+  Future<List<QuickExpenseTemplate>> getAll() =>
+      _db.select(_db.quickExpenseTemplates).get();
+
   Future<int> create(
           {required String label,
           required int amount,

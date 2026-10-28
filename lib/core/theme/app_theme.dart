@@ -1,14 +1,106 @@
 import 'package:flutter/material.dart';
 
-/// Paleta "Peso a Peso": cuaderno contable / ledger, ahora en tonos violeta.
-class AppColors {
-  static const paper = Color(0xFFF4F0F6);
-  static const paperDeep = Color(0xFFE7DEEC);
-  static const rule = Color(0xFFC7B4D1);
-  static const ink = Color(0xFF4B2E6B);
-  static const inkSoft = Color(0xFF7C6789);
-  static const green = Color(0xFF4F7A5C);
-  static const rust = Color(0xFFA3352B);
+/// Paleta "Peso a Peso": cuaderno contable / ledger, en tonos violeta.
+///
+/// UX11: es una extensión del tema, con una variante clara (papel) y una
+/// oscura (el mismo cuaderno de noche). Se lee con `context.colors`, para que
+/// cada widget se repinte al cambiar el modo del sistema. Ambas variantes
+/// cumplen contraste AA (4,5:1) para texto sobre paper y paperDeep.
+@immutable
+class AppPalette extends ThemeExtension<AppPalette> {
+  const AppPalette({
+    required this.paper,
+    required this.paperDeep,
+    required this.rule,
+    required this.ink,
+    required this.inkSoft,
+    required this.green,
+    required this.rust,
+    required this.isDark,
+  });
+
+  final Color paper;
+  final Color paperDeep;
+  final Color rule;
+  final Color ink;
+  final Color inkSoft;
+  final Color green;
+  final Color rust;
+  final bool isDark;
+
+  static const light = AppPalette(
+    paper: Color(0xFFF4F0F6),
+    paperDeep: Color(0xFFE7DEEC),
+    rule: Color(0xFFC7B4D1),
+    ink: Color(0xFF4B2E6B),
+    inkSoft: Color(0xFF6E5A7B),
+    green: Color(0xFF3E654A),
+    rust: Color(0xFFA3352B),
+    isDark: false,
+  );
+
+  static const dark = AppPalette(
+    paper: Color(0xFF1B1520),
+    paperDeep: Color(0xFF262030),
+    rule: Color(0xFF4E4259),
+    ink: Color(0xFFEDE4F4),
+    inkSoft: Color(0xFFB6A6C3),
+    green: Color(0xFF8CC39C),
+    rust: Color(0xFFF08C80),
+    isDark: true,
+  );
+
+  /// Color de una categoría tal como se muestra. Los colores guardados están
+  /// pensados para el papel claro; sobre el fondo oscuro se aclaran para que
+  /// íconos y barras se sigan distinguiendo (3:1 o más).
+  Color category(int colorValue) {
+    final c = Color(colorValue);
+    return isDark ? Color.lerp(c, Colors.white, 0.4)! : c;
+  }
+
+  @override
+  AppPalette copyWith({
+    Color? paper,
+    Color? paperDeep,
+    Color? rule,
+    Color? ink,
+    Color? inkSoft,
+    Color? green,
+    Color? rust,
+    bool? isDark,
+  }) =>
+      AppPalette(
+        paper: paper ?? this.paper,
+        paperDeep: paperDeep ?? this.paperDeep,
+        rule: rule ?? this.rule,
+        ink: ink ?? this.ink,
+        inkSoft: inkSoft ?? this.inkSoft,
+        green: green ?? this.green,
+        rust: rust ?? this.rust,
+        isDark: isDark ?? this.isDark,
+      );
+
+  @override
+  AppPalette lerp(AppPalette? other, double t) {
+    if (other == null) return this;
+    return AppPalette(
+      paper: Color.lerp(paper, other.paper, t)!,
+      paperDeep: Color.lerp(paperDeep, other.paperDeep, t)!,
+      rule: Color.lerp(rule, other.rule, t)!,
+      ink: Color.lerp(ink, other.ink, t)!,
+      inkSoft: Color.lerp(inkSoft, other.inkSoft, t)!,
+      green: Color.lerp(green, other.green, t)!,
+      rust: Color.lerp(rust, other.rust, t)!,
+      isDark: t < 0.5 ? isDark : other.isDark,
+    );
+  }
+}
+
+extension AppPaletteContext on BuildContext {
+  /// Paleta del tema actual (clara u oscura). Sin el tema de la app (p. ej.
+  /// un MaterialApp de prueba), la clara.
+  AppPalette get colors =>
+      Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
 }
 
 /// Un color por categoría, igual que en el mockup, para mantener consistencia
@@ -39,13 +131,17 @@ const appAmountTextStyle = TextStyle(
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
-ThemeData buildAppTheme() {
+ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
+  final c = brightness == Brightness.dark ? AppPalette.dark : AppPalette.light;
   return ThemeData(
     useMaterial3: true,
-    scaffoldBackgroundColor: AppColors.paper,
+    brightness: brightness,
+    extensions: [c],
+    scaffoldBackgroundColor: c.paper,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: AppColors.green,
-      surface: AppColors.paper,
+      seedColor: c.green,
+      brightness: brightness,
+      surface: c.paper,
     ),
     fontFamily: AppFonts.body,
     textTheme: const TextTheme(
@@ -64,11 +160,11 @@ ThemeData buildAppTheme() {
         fontStyle: FontStyle.italic,
         fontWeight: FontWeight.w500,
       ),
-    ),
-    dividerColor: AppColors.rule,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.paper,
-      foregroundColor: AppColors.ink,
+    ).apply(bodyColor: c.ink, displayColor: c.ink),
+    dividerColor: c.rule,
+    appBarTheme: AppBarTheme(
+      backgroundColor: c.paper,
+      foregroundColor: c.ink,
       elevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
@@ -76,18 +172,29 @@ ThemeData buildAppTheme() {
         fontStyle: FontStyle.italic,
         fontWeight: FontWeight.w600,
         fontSize: 22,
-        color: AppColors.ink,
+        color: c.ink,
       ),
     ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: AppColors.paperDeep,
-      selectedItemColor: AppColors.green,
-      unselectedItemColor: AppColors.inkSoft,
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: c.paperDeep,
+      selectedItemColor: c.green,
+      unselectedItemColor: c.inkSoft,
       type: BottomNavigationBarType.fixed,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: AppColors.green,
-      linearTrackColor: AppColors.paperDeep,
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: c.green,
+      linearTrackColor: c.paperDeep,
     ),
+    // Los botones rellenos usan ink, rust o green de fondo: el texto va en
+    // color papel para que contraste en ambos modos (con el blanco por
+    // defecto, en oscuro quedaría blanco sobre lavanda claro).
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(foregroundColor: c.paper),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      contentTextStyle: TextStyle(fontFamily: AppFonts.body, color: c.paper),
+    ),
+    dialogTheme: DialogThemeData(backgroundColor: c.paper),
+    bottomSheetTheme: BottomSheetThemeData(backgroundColor: c.paper),
   );
 }

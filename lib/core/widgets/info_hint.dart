@@ -25,11 +25,11 @@ class InfoTooltip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       constraints: const BoxConstraints(maxWidth: 320),
       decoration: BoxDecoration(
-        color: AppColors.ink,
+        color: context.colors.ink,
         borderRadius: BorderRadius.circular(8),
       ),
-      textStyle: const TextStyle(
-          color: AppColors.paper, fontSize: 12, height: 1.35),
+      textStyle:
+          TextStyle(color: context.colors.paper, fontSize: 12, height: 1.35),
       child: child,
     );
   }
@@ -42,5 +42,5 @@ class InfoIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Icon(Icons.info_outline, size: size, color: AppColors.inkSoft);
+      Icon(Icons.info_outline, size: size, color: context.colors.inkSoft);
 }

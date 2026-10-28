@@ -1,6 +1,14 @@
 /// Versión del formato que escribe `exportAllData`. Subirla al cambiar el
 /// formato de forma incompatible; un respaldo con versión mayor la rechaza.
-const kBackupFormatVersion = 1;
+///
+/// v2 (RNF19): agrega `paymentMethods`, `installmentPlans` y en
+/// `transactions` el método de pago y el plan de cuotas.
+/// Los respaldos v1 se siguen aceptando: sus gastos quedan sin método.
+///
+/// v3 (RF47): agrega `habitualOccurrences` y en `recurringTemplates` el modo
+/// y los datos del gasto habitual. Una versión anterior de la app tomaría
+/// los gastos habituales por pagos mensuales, por eso sube la versión.
+const kBackupFormatVersion = 3;
 
 /// Tamaño máximo aceptado para un archivo de respaldo (un respaldo real pesa
 /// unos pocos MB incluso con años de gastos).
@@ -50,7 +58,15 @@ void validateBackupData(Object? decoded) {
     'savingsContributions',
     'savingsQuickAdds',
   ];
-  const optional = ['monthlyBudgets', 'quickExpenseTemplates', 'appSettings'];
+  const optional = [
+    'monthlyBudgets',
+    'quickExpenseTemplates',
+    'monthlyAdjustments',
+    'paymentMethods',
+    'installmentPlans',
+    'habitualOccurrences',
+    'appSettings',
+  ];
 
   List<Map<String, dynamic>> rows(String key, {required bool mustExist}) {
     final value = decoded[key];
@@ -76,9 +92,21 @@ void validateBackupData(Object? decoded) {
     for (final r in rows('savingsGoals', mustExist: true)) r['id']
   };
 
-  void checkRefs(String table, String column, Set<Object?> valid) {
+  final templateIds = {
+    for (final r in rows('recurringTemplates', mustExist: true)) r['id']
+  };
+  final paymentMethodIds = {
+    for (final r in rows('paymentMethods', mustExist: false)) r['id']
+  };
+  final planIds = {
+    for (final r in rows('installmentPlans', mustExist: false)) r['id']
+  };
+
+  void checkRefs(String table, String column, Set<Object?> valid,
+      {bool nullable = false}) {
     // Un gasto, presupuesto, etc. que apunta a algo que no está en el archivo.
     for (final r in rows(table, mustExist: false)) {
+      if (nullable && r[column] == null) continue;
       if (!valid.contains(r[column])) {
         throw const FormatException(kBackupCorruptMessage);
       }
@@ -91,4 +119,20 @@ void validateBackupData(Object? decoded) {
   checkRefs('quickExpenseTemplates', 'categoryId', categoryIds);
   checkRefs('savingsContributions', 'goalId', goalIds);
   checkRefs('savingsQuickAdds', 'goalId', goalIds);
+  checkRefs('transactions', 'recurringTemplateId', templateIds, nullable: true);
+  checkRefs('monthlyAdjustments', 'categoryId', categoryIds, nullable: true);
+  checkRefs('transactions', 'paymentMethodId', paymentMethodIds,
+      nullable: true);
+  checkRefs('installmentPlans', 'paymentMethodId', paymentMethodIds);
+  checkRefs('installmentPlans', 'categoryId', categoryIds);
+  checkRefs('transactions', 'installmentPlanId', planIds, nullable: true);
+  checkRefs('transactions', 'fundedByGoalId', goalIds, nullable: true);
+  checkRefs('recurringTemplates', 'paymentMethodId', paymentMethodIds,
+      nullable: true);
+  final transactionIds = {
+    for (final r in rows('transactions', mustExist: true)) r['id']
+  };
+  checkRefs('habitualOccurrences', 'templateId', templateIds);
+  checkRefs('habitualOccurrences', 'transactionId', transactionIds,
+      nullable: true);
 }

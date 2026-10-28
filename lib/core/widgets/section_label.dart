@@ -21,10 +21,10 @@ class SectionLabel extends StatelessWidget {
       children: [
         Text(
           text.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             letterSpacing: 1.1,
-            color: AppColors.inkSoft,
+            color: context.colors.inkSoft,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -33,7 +33,7 @@ class SectionLabel extends StatelessWidget {
           width: 22,
           height: 2,
           decoration: BoxDecoration(
-            color: AppColors.rust,
+            color: context.colors.rust,
             borderRadius: BorderRadius.circular(1),
           ),
         ),
@@ -45,7 +45,7 @@ class SectionLabel extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          label,
+          Flexible(child: label),
           const SizedBox(width: 6),
           const Padding(
             padding: EdgeInsets.only(bottom: 6),

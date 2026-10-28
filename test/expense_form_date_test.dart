@@ -1,26 +1,40 @@
 // Editar un gasto de más de 2 años de antigüedad abre el selector de fecha
 // sin reventar el assert initialDate >= firstDate.
 
+import 'dart:ffi';
+
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:sqlite3/open.dart';
 import 'package:peso_a_peso/core/providers/app_providers.dart';
 import 'package:peso_a_peso/data/local/app_database.dart';
 import 'package:peso_a_peso/features/agregar_gasto/expense_form.dart';
 
 void main() {
-  setUpAll(() => initializeDateFormatting('es_CL', null));
+  setUpAll(() async {
+    open.overrideFor(
+        OperatingSystem.linux, () => DynamicLibrary.open('libsqlite3.so.0'));
+    await initializeDateFormatting('es_CL', null);
+  });
 
   testWidgets('abre el selector de fecha con un gasto de hace 5 años',
       (tester) async {
     const category = Category(
-        id: 'ocio', name: 'Ocio', colorValue: 0xFF6B3F5C, iconKey: 'theaters');
+        id: 'ocio',
+        name: 'Ocio',
+        colorValue: 0xFF6B3F5C,
+        iconKey: 'theaters',
+        archived: false);
     final old = DateTime.now().subtract(const Duration(days: 365 * 5));
 
     await tester.pumpWidget(ProviderScope(
       overrides: [
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -36,7 +50,10 @@ void main() {
                 required date,
                 required note,
                 required recurring,
-              }) async {},
+                required paymentMethodId,
+                required installments,
+              }) async =>
+                  null,
             ),
           ),
         ),
@@ -53,10 +70,20 @@ void main() {
 
   Widget form({required bool editing, required void Function() onSubmit}) {
     const category = Category(
-        id: 'ocio', name: 'Ocio', colorValue: 0xFF6B3F5C, iconKey: 'theaters');
+        id: 'ocio',
+        name: 'Ocio',
+        colorValue: 0xFF6B3F5C,
+        iconKey: 'theaters',
+        archived: false);
+    // Un gasto nuevo consulta la última categoría usada (UX03).
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
     return ProviderScope(
       overrides: [
+        appDatabaseProvider.overrideWithValue(db),
         categoriesProvider.overrideWith((ref) => Stream.value([category])),
+        paymentMethodsProvider
+            .overrideWith((ref) => Stream.value(<PaymentMethod>[])),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -69,8 +96,12 @@ void main() {
                 required date,
                 required note,
                 required recurring,
-              }) async =>
-                  onSubmit(),
+                required paymentMethodId,
+                required installments,
+              }) async {
+                onSubmit();
+                return null;
+              },
             ),
           ),
         ),
@@ -90,7 +121,8 @@ void main() {
     expect(submitted, 0);
   });
 
-  testWidgets('el campo de monto agrupa miles y descarta signos', (tester) async {
+  testWidgets('el campo de monto agrupa miles y descarta signos',
+      (tester) async {
     await tester.pumpWidget(form(editing: false, onSubmit: () {}));
     await tester.pumpAndSettle();
 
@@ -98,8 +130,7 @@ void main() {
     expect(find.text('1.500'), findsOneWidget);
   });
 
-  testWidgets('al editar no se ofrece el switch de recurrente',
-      (tester) async {
+  testWidgets('al editar no se ofrece el switch de recurrente', (tester) async {
     await tester.pumpWidget(form(editing: true, onSubmit: () {}));
     await tester.pumpAndSettle();
     expect(find.text('Gasto recurrente'), findsNothing);

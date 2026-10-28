@@ -1,23 +1,26 @@
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'core/notifications/habitual_reminders.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/providers/app_providers.dart';
+import 'core/startup/budget_suggestion.dart';
 import 'core/startup/remainder_prompt.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/budget_alert.dart';
 import 'core/utils/formatting.dart';
+import 'data/local/connection.dart';
+import 'data/repositories/backup_repository.dart';
 import 'features/agregar_gasto/agregar_screen.dart';
-import 'features/categorias/categorias_screen.dart';
+import 'features/ajustes/ajustes_screen.dart';
 import 'features/estadisticas/estadisticas_screen.dart';
 import 'features/metas/metas_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/presupuestos/presupuestos_screen.dart';
-import 'features/recurrentes/recurrentes_screen.dart';
 import 'features/resumen/resumen_screen.dart';
-import 'features/respaldo/respaldo_screen.dart';
 
 void main() async {
   await initializeDateFormatting('es_CL', null);
@@ -44,6 +47,9 @@ class GastoAManoApp extends StatelessWidget {
       title: 'Peso a Peso',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      // UX11: sigue el modo claro/oscuro del sistema.
+      darkTheme: buildAppTheme(brightness: Brightness.dark),
+      themeMode: ThemeMode.system,
       scrollBehavior: _AppScrollBehavior(),
       home: const _StartupGate(),
     );
@@ -90,29 +96,125 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
     _check();
   }
 
+  bool _busy = false;
+
+  /// Cierra la base que no abre, la borra junto con su clave y deja que el
+  /// provider cree una nueva y vacía en la próxima lectura.
+  Future<void> _resetDatabase() async {
+    try {
+      await ref.read(appDatabaseProvider).close();
+    } catch (_) {
+      // Nunca llegó a abrirse: no hay nada que cerrar.
+    }
+    await deleteDatabaseStorage();
+    ref.invalidate(appDatabaseProvider);
+  }
+
+  Future<bool> _confirmWipe({required String action}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.paper,
+        title: Text(action,
+            style: TextStyle(fontSize: 16, color: context.colors.ink)),
+        content: Text(
+          'La base de datos actual de este dispositivo se borrará para '
+          'siempre. Hazlo solo si ya no se puede abrir.',
+          style: TextStyle(color: context.colors.inkSoft),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.colors.inkSoft)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.colors.rust),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Borrar y continuar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  void _showMessage(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), backgroundColor: context.colors.rust),
+    );
+  }
+
+  /// El respaldo se elige y valida ANTES de borrar nada: si el archivo no
+  /// sirve, la base actual queda como estaba.
+  Future<void> _restoreFromBackup() async {
+    setState(() => _busy = true);
+    try {
+      final Uint8List? bytes;
+      try {
+        bytes = await BackupRepository.pickBackupFile();
+        if (bytes == null) return;
+        BackupRepository.parseBackup(bytes);
+      } on FormatException catch (e) {
+        _showMessage(e.message);
+        return;
+      }
+      if (!mounted || !await _confirmWipe(action: 'Restaurar respaldo')) {
+        return;
+      }
+
+      await _resetDatabase();
+      await ref.read(backupRepositoryProvider).restoreFromBytes(bytes);
+      // Respaldos antiguos pueden no traer esta marca; quien restaura ya
+      // configuró la app y no debe ver el recorrido inicial.
+      await ref
+          .read(settingsRepositoryProvider)
+          .set(kOnboardingCompletedKey, 'true');
+      _retry();
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo restaurar el respaldo. Inténtalo de nuevo.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _startFresh() async {
+    if (!await _confirmWipe(action: 'Empezar de cero')) return;
+    setState(() => _busy = true);
+    try {
+      await _resetDatabase();
+      _retry();
+    } catch (_) {
+      if (mounted) _showMessage('No se pudo borrar la base de datos.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_startupError != null) {
       return Scaffold(
-        backgroundColor: AppColors.paper,
+        backgroundColor: context.colors.paper,
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline,
-                    size: 40, color: AppColors.rust),
+                Icon(Icons.error_outline, size: 40, color: context.colors.rust),
                 const SizedBox(height: 16),
-                const Text('No se pudo abrir tu base de datos',
-                    style: TextStyle(fontSize: 18, color: AppColors.ink)),
+                Text('No se pudo abrir tu base de datos',
+                    style: TextStyle(fontSize: 18, color: context.colors.ink)),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Tus datos están cifrados con una clave que vive solo en '
                   'este dispositivo. Si reinstalaste la app o cambiaste de '
                   'equipo, restaura tu archivo de respaldo.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                  style: TextStyle(color: context.colors.inkSoft, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
                 Text('$_startupError',
@@ -120,13 +222,33 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                     style:
-                        const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
+                        TextStyle(color: context.colors.inkSoft, fontSize: 11)),
                 const SizedBox(height: 20),
                 FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.ink),
-                  onPressed: _retry,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: context.colors.ink),
+                  onPressed: _busy ? null : _retry,
                   child: const Text('Reintentar'),
                 ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: context.colors.ink,
+                    side: BorderSide(color: context.colors.rule),
+                  ),
+                  onPressed: _busy ? null : _restoreFromBackup,
+                  icon: const Icon(Icons.file_upload_outlined),
+                  label: const Text('Restaurar desde respaldo'),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : _startFresh,
+                  child: Text('Empezar de cero',
+                      style: TextStyle(color: context.colors.rust)),
+                ),
+                if (_busy) ...[
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                ],
               ],
             ),
           ),
@@ -134,9 +256,9 @@ class _StartupGateState extends ConsumerState<_StartupGate> {
       );
     }
     if (_needsOnboarding == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.paper,
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: context.colors.paper,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (_needsOnboarding == true) {
@@ -156,7 +278,7 @@ class RootShell extends ConsumerStatefulWidget {
 
 class _RootShellState extends ConsumerState<RootShell>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  int _index = 0;
+  int get _index => ref.watch(selectedTabProvider);
   late final _fadeController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 220),
@@ -166,6 +288,11 @@ class _RootShellState extends ConsumerState<RootShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // RF48: "Registrar" / "Hoy no" con la app abierta usan esta conexión, así
+    // Resumen se actualiza al instante.
+    NotificationService.instance.onForegroundResponse = (response) =>
+        handleHabitualResponse(
+            ref.read(appDatabaseProvider), response, DateTime.now());
     // RF12: al abrir la app, genera la ocurrencia del mes actual de
     // cualquier plantilla recurrente que todavía no la tenga.
     WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupChecks());
@@ -182,6 +309,10 @@ class _RootShellState extends ConsumerState<RootShell>
     final now = DateTime.now();
     ref.read(currentMonthProvider.notifier).state =
         DateTime(now.year, now.month);
+    // RF48: una acción de notificación respondida en segundo plano escribió
+    // con otra conexión; los streams de esta no se enteran solos.
+    final db = ref.read(appDatabaseProvider);
+    db.markTablesUpdated({db.transactions, db.habitualOccurrences});
     _runStartupChecks();
   }
 
@@ -220,29 +351,57 @@ class _RootShellState extends ConsumerState<RootShell>
       );
     }
 
+    // RF55: el presupuesto total, una vez por umbral y por mes.
+    if (generated.isNotEmpty) {
+      final total = await evaluateTotalBudgetAlert(
+        categories: ref.read(categoriesRepositoryProvider),
+        transactions: ref.read(transactionsRepositoryProvider),
+        settings: ref.read(settingsRepositoryProvider),
+        date: generated.last.date,
+      );
+      if (total != null) {
+        await NotificationService.instance.init();
+        await NotificationService.instance.showBudgetAlert(
+          // Los ids de gastos parten en 1: el 0 queda para el total.
+          id: 0,
+          title: total.isOverBudget
+              ? 'Presupuesto total superado'
+              : 'Presupuesto total casi lleno',
+          body: '${total.message} Incluye gastos recurrentes registrados '
+              'automáticamente.',
+        );
+      }
+    }
+
+    // RF48: los recordatorios de gastos habituales (reprograma también tras
+    // restaurar un respaldo o actualizar la app).
+    await syncHabitualRemindersFrom(ref.read(appDatabaseProvider));
+
     // RF15: remanente del mes anterior, si corresponde.
     if (!mounted) return;
     await checkPreviousMonthRemainder(context, ref);
+
+    // Onboarding "Aún no sé": al cerrar el primer mes, sugerir presupuesto.
+    if (!mounted) return;
+    await checkBudgetSuggestion(context, ref);
   }
 
   static const _screens = [
     ResumenScreen(),
-    AgregarScreen(),
     PresupuestosScreen(),
     MetasScreen(),
     EstadisticasScreen(),
   ];
+
+  /// UX04: el registro es un botón al centro de la barra, no una pestaña:
+  /// abre la hoja de registro y el usuario sigue en la pantalla donde estaba.
+  static const _registerSlot = 2;
 
   static const _destinations = [
     (
       icon: Icons.menu_book_outlined,
       selectedIcon: Icons.menu_book,
       label: 'Resumen',
-    ),
-    (
-      icon: Icons.add_circle_outline,
-      selectedIcon: Icons.add_circle,
-      label: 'Agregar',
     ),
     (
       icon: Icons.account_balance_wallet_outlined,
@@ -261,49 +420,52 @@ class _RootShellState extends ConsumerState<RootShell>
     ),
   ];
 
-  void _selectTab(int i) {
-    if (i == _index) return;
-    setState(() => _index = i);
-    _fadeController.forward(from: 0);
+  void _selectDestination(int slot) {
+    if (slot == _registerSlot) {
+      showRegisterSheet(context);
+      return;
+    }
+    final i = slot > _registerSlot ? slot - 1 : slot;
+    if (i == ref.read(selectedTabProvider)) return;
+    ref.read(selectedTabProvider.notifier).state = i;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    NotificationService.instance.onForegroundResponse = null;
     _fadeController.dispose();
     super.dispose();
   }
 
+  static NavigationDestination _destination(BuildContext context,
+          ({IconData icon, IconData selectedIcon, String label}) d) =>
+      NavigationDestination(
+        icon: Icon(d.icon, color: context.colors.inkSoft),
+        selectedIcon: Icon(d.selectedIcon, color: context.colors.green),
+        label: d.label,
+      );
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(selectedTabProvider, (prev, next) {
+      if (prev != next) _fadeController.forward(from: 0);
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text('Peso a Peso'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.sell_outlined),
-            tooltip: 'Categorías',
+          // UX05: un solo acceso con nombre en lugar de tres íconos sin texto.
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: context.colors.ink),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const CategoriasScreen()),
+              MaterialPageRoute(builder: (_) => const AjustesScreen()),
             ),
+            icon: const Icon(Icons.settings_outlined),
+            label: const Text('Ajustes'),
           ),
-          IconButton(
-            icon: const Icon(Icons.event_repeat_outlined),
-            tooltip: 'Gastos recurrentes',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const RecurrentesScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.backup_outlined),
-            tooltip: 'Respaldo',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const RespaldoScreen()),
-            ),
-          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: SafeArea(
@@ -316,18 +478,29 @@ class _RootShellState extends ConsumerState<RootShell>
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _selectTab,
-        backgroundColor: AppColors.paperDeep,
-        indicatorColor: AppColors.green.withValues(alpha: 0.18),
+        selectedIndex: _index >= _registerSlot ? _index + 1 : _index,
+        onDestinationSelected: _selectDestination,
+        backgroundColor: context.colors.paperDeep,
+        indicatorColor: context.colors.green.withValues(alpha: 0.18),
         animationDuration: const Duration(milliseconds: 350),
         destinations: [
-          for (final d in _destinations)
-            NavigationDestination(
-              icon: Icon(d.icon, color: AppColors.inkSoft),
-              selectedIcon: Icon(d.selectedIcon, color: AppColors.green),
-              label: d.label,
+          for (final d in _destinations.take(_registerSlot))
+            _destination(context, d),
+          NavigationDestination(
+            icon: Container(
+              width: 48,
+              height: 32,
+              decoration: BoxDecoration(
+                color: context.colors.ink,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(Icons.add, color: context.colors.paper),
             ),
+            label: 'Registrar',
+            tooltip: 'Registrar gasto',
+          ),
+          for (final d in _destinations.skip(_registerSlot))
+            _destination(context, d),
         ],
       ),
     );

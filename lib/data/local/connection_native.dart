@@ -39,6 +39,8 @@ Future<String> _databaseEncryptionKey() async {
   return key;
 }
 
+const _dbFileName = 'libro_de_gastos.db';
+
 QueryExecutor openConnection() {
   return LazyDatabase(() async {
     if (Platform.isAndroid) {
@@ -50,7 +52,7 @@ QueryExecutor openConnection() {
 
     final key = await _databaseEncryptionKey();
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'libro_de_gastos.db'));
+    final file = File(p.join(dir.path, _dbFileName));
 
     return NativeDatabase.createInBackground(
       file,
@@ -72,4 +74,16 @@ QueryExecutor openConnection() {
       },
     );
   });
+}
+
+Future<void> deleteStorage() async {
+  final dir = await getApplicationDocumentsDirectory();
+  final base = p.join(dir.path, _dbFileName);
+  for (final path in [base, '$base-wal', '$base-shm', '$base-journal']) {
+    final file = File(path);
+    if (await file.exists()) await file.delete();
+  }
+  // Sin borrar la clave, la base nueva quedaría cifrada con la misma clave
+  // que ya no abría la anterior; así se genera una nueva desde cero.
+  await _secureStorage.delete(key: _dbEncryptionKeyStorageKey);
 }

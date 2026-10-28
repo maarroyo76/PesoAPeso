@@ -11,7 +11,10 @@ import '../../core/widgets/info_hint.dart';
 import '../../core/widgets/month_selector.dart';
 import '../../core/widgets/month_swipe.dart';
 import '../../core/widgets/section_label.dart';
+import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
+import 'payment_stats_section.dart';
+import 'worth_it_section.dart';
 
 class EstadisticasScreen extends ConsumerStatefulWidget {
   const EstadisticasScreen({super.key});
@@ -78,10 +81,10 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
 
     return categoriesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => LoadError(e),
       data: (categories) => txCurrentAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => LoadError(e),
         data: (txCurrent) => _buildContent(
           categories,
           txCurrent,
@@ -235,6 +238,8 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
         ),
         const SizedBox(height: 16),
         _MonthBarsSection(months: months),
+        PaymentStatsSection(months: months, transactions: txCurrent),
+        WorthItSection(transactions: txCurrent, categoriesById: categoriesById),
       ],
     );
   }
@@ -276,49 +281,61 @@ class _InsightGrid extends StatelessWidget {
     final recurringPct = total > 0 ? (recurringSpent / total * 100).round() : 0;
     final variablePct = total > 0 ? 100 - recurringPct : 0;
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 2.3,
+    final tiles = [
+      _StatTile(
+        label: 'PROMEDIO DIARIO',
+        value: currencyFmt.format(avgDaily),
+        info: isCurrentMonth
+            ? 'Cuánto gastas en promedio por día: el gasto total del mes '
+                'dividido por los días que han pasado.'
+            : 'Cuánto gastaste en promedio por día: el gasto total del mes '
+                'dividido por los días del mes.',
+      ),
+      _StatTile(
+        label: isCurrentMonth ? 'PROYECCIÓN' : 'TOTAL DEL MES',
+        value: currencyFmt.format(projected),
+        info: isCurrentMonth
+            ? 'Estimación de cuánto habrás gastado al cierre del mes si '
+                'sigues al ritmo de tu promedio diario. Es una referencia, '
+                'no un dato exacto.'
+            : 'Suma de todo lo que gastaste en este mes.',
+      ),
+      _StatTile(
+        label: 'GASTO RECURRENTE',
+        value: '$recurringPct%',
+        sub: currencyFmt.format(recurringSpent),
+        info: 'Gastos fijos que se repiten solos cada mes, como el '
+            'arriendo o las suscripciones (los que marcaste como '
+            '"recurrentes"). El porcentaje es su peso sobre el gasto total '
+            'del mes.',
+      ),
+      _StatTile(
+        label: 'GASTO VARIABLE',
+        value: '$variablePct%',
+        sub: currencyFmt.format(variableSpent),
+        info: 'Todo lo demás: gastos del día a día que registras a mano '
+            '(comida, transporte, salidas) y que cambian de un mes a otro. '
+            'Es la parte que más puedes ajustar.',
+      ),
+    ];
+
+    // Dos filas de dos tarjetas que toman el alto de su contenido (antes una
+    // grilla con proporción fija, que cortaba las tarjetas con letra grande).
+    Widget row(Widget a, Widget b) => IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: a),
+              const SizedBox(width: 12),
+              Expanded(child: b),
+            ],
+          ),
+        );
+    return Column(
       children: [
-        _StatTile(
-          label: 'PROMEDIO DIARIO',
-          value: currencyFmt.format(avgDaily),
-          info: isCurrentMonth
-              ? 'Cuánto gastas en promedio por día: el gasto total del mes '
-                  'dividido por los días que han pasado.'
-              : 'Cuánto gastaste en promedio por día: el gasto total del mes '
-                  'dividido por los días del mes.',
-        ),
-        _StatTile(
-          label: isCurrentMonth ? 'PROYECCIÓN' : 'TOTAL DEL MES',
-          value: currencyFmt.format(projected),
-          info: isCurrentMonth
-              ? 'Estimación de cuánto habrás gastado al cierre del mes si '
-                  'sigues al ritmo de tu promedio diario. Es una referencia, '
-                  'no un dato exacto.'
-              : 'Suma de todo lo que gastaste en este mes.',
-        ),
-        _StatTile(
-          label: 'GASTO RECURRENTE',
-          value: '$recurringPct%',
-          sub: currencyFmt.format(recurringSpent),
-          info: 'Gastos fijos que se repiten solos cada mes, como el '
-              'arriendo o las suscripciones (los que marcaste como '
-              '"recurrentes"). El porcentaje es su peso sobre el gasto total '
-              'del mes.',
-        ),
-        _StatTile(
-          label: 'GASTO VARIABLE',
-          value: '$variablePct%',
-          sub: currencyFmt.format(variableSpent),
-          info: 'Todo lo demás: gastos del día a día que registras a mano '
-              '(comida, transporte, salidas) y que cambian de un mes a otro. '
-              'Es la parte que más puedes ajustar.',
-        ),
+        row(tiles[0], tiles[1]),
+        const SizedBox(height: 12),
+        row(tiles[2], tiles[3]),
       ],
     );
   }
@@ -339,9 +356,9 @@ class _StatTile extends StatelessWidget {
     final tile = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.paperDeep,
+        color: context.colors.paperDeep,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.rule),
+        border: Border.all(color: context.colors.rule),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,10 +370,10 @@ class _StatTile extends StatelessWidget {
                 child: Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 9,
+                    style: TextStyle(
+                        fontSize: 10,
                         letterSpacing: 1.0,
-                        color: AppColors.inkSoft)),
+                        color: context.colors.inkSoft)),
               ),
               if (info != null) const InfoIcon(size: 13),
             ],
@@ -369,13 +386,13 @@ class _StatTile extends StatelessWidget {
                 style: appAmountTextStyle.copyWith(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.ink)),
+                    color: context.colors.ink)),
           ),
           if (sub != null) ...[
             const SizedBox(height: 2),
             Text(sub!,
                 style: appAmountTextStyle.copyWith(
-                    fontSize: 10, color: AppColors.inkSoft)),
+                    fontSize: 11, color: context.colors.inkSoft)),
           ],
         ],
       ),
@@ -390,13 +407,13 @@ class _EmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.paperDeep,
+        color: context.colors.paperDeep,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.rule),
+        border: Border.all(color: context.colors.rule),
       ),
-      child: const Center(
+      child: Center(
         child: Text('Sin gastos registrados este mes.',
-            style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+            style: TextStyle(color: context.colors.inkSoft, fontSize: 13)),
       ),
     );
   }
@@ -448,7 +465,7 @@ class _PieSection extends StatelessWidget {
                 final isTouched = i == touchedIndex;
                 return PieChartSectionData(
                   value: spent.toDouble(),
-                  color: Color(cat.colorValue),
+                  color: context.colors.category(cat.colorValue),
                   radius: isTouched ? 52 : 42,
                   showTitle: false,
                 );
@@ -458,11 +475,11 @@ class _PieSection extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('GASTADO',
+              Text('GASTADO',
                   style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       letterSpacing: 1.2,
-                      color: AppColors.inkSoft)),
+                      color: context.colors.inkSoft)),
               const SizedBox(height: 2),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -473,13 +490,13 @@ class _PieSection extends StatelessWidget {
                     style: appAmountTextStyle.copyWith(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.ink),
+                        color: context.colors.ink),
                   ),
                 ),
               ),
               Text(
                 'de ${currencyFmt.format(totalBudget)}',
-                style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
+                style: TextStyle(fontSize: 11, color: context.colors.inkSoft),
               ),
             ],
           ),
@@ -523,27 +540,28 @@ class _Legend extends StatelessWidget {
                   height: 16,
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
-                    color: Color(cat.colorValue),
+                    color: context.colors.category(cat.colorValue),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                Icon(iconForCategory(cat), size: 15, color: AppColors.inkSoft),
+                Icon(iconForCategory(cat),
+                    size: 15, color: context.colors.inkSoft),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(cat.name,
                       style:
-                          const TextStyle(fontSize: 13, color: AppColors.ink)),
+                          TextStyle(fontSize: 13, color: context.colors.ink)),
                 ),
                 Text('$pct%',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.inkSoft)),
+                    style:
+                        TextStyle(fontSize: 12, color: context.colors.inkSoft)),
                 const SizedBox(width: 12),
                 Text(
                   currencyFmt.format(spent),
                   style: appAmountTextStyle.copyWith(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.ink),
+                      color: context.colors.ink),
                 ),
               ],
             ),
@@ -580,9 +598,9 @@ class _CategoryDeltaSection extends StatelessWidget {
           (spentByCategory[b.id] ?? 0).compareTo(spentByCategory[a.id] ?? 0));
 
     if (relevant.isEmpty) {
-      return const Text(
+      return Text(
         'Sin datos suficientes para comparar con el mes anterior.',
-        style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+        style: TextStyle(color: context.colors.inkSoft, fontSize: 12),
       );
     }
 
@@ -590,7 +608,7 @@ class _CategoryDeltaSection extends StatelessWidget {
       children: relevant.map((c) {
         final curr = spentByCategory[c.id] ?? 0;
         final prev = prevSpentByCategory[c.id] ?? 0;
-        final color = Color(c.colorValue);
+        final color = context.colors.category(c.colorValue);
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
@@ -604,16 +622,16 @@ class _CategoryDeltaSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Icon(iconForCategory(c), size: 15, color: AppColors.inkSoft),
+              Icon(iconForCategory(c), size: 15, color: context.colors.inkSoft),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(c.name,
-                    style: const TextStyle(fontSize: 13, color: AppColors.ink)),
+                    style: TextStyle(fontSize: 13, color: context.colors.ink)),
               ),
               Text(
                 currencyFmt.format(curr),
                 style: appAmountTextStyle.copyWith(
-                    fontSize: 12, color: AppColors.inkSoft),
+                    fontSize: 12, color: context.colors.inkSoft),
               ),
               const SizedBox(width: 8),
               _DeltaLabel(curr: curr, prev: prev),
@@ -633,17 +651,17 @@ class _DeltaLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (prev == 0) {
-      return const Text('Nuevo',
-          style: TextStyle(fontSize: 11, color: AppColors.inkSoft));
+      return Text('Nuevo',
+          style: TextStyle(fontSize: 11, color: context.colors.inkSoft));
     }
     final diff = curr - prev;
     if (diff == 0) {
-      return const Text('Igual',
-          style: TextStyle(fontSize: 11, color: AppColors.inkSoft));
+      return Text('Igual',
+          style: TextStyle(fontSize: 11, color: context.colors.inkSoft));
     }
     final pct = (diff.abs() / prev * 100).round();
     final isDown = diff < 0;
-    final color = isDown ? AppColors.green : AppColors.rust;
+    final color = isDown ? context.colors.green : context.colors.rust;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -681,20 +699,20 @@ class _WeekdaySection extends StatelessWidget {
       height: 160,
       padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
       decoration: BoxDecoration(
-        color: AppColors.paperDeep,
+        color: context.colors.paperDeep,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.rule),
+        border: Border.all(color: context.colors.rule),
       ),
       child: BarChart(
         BarChartData(
           maxY: maxVal > 0 ? maxVal * 1.25 : 100,
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => AppColors.ink,
+              getTooltipColor: (_) => context.colors.ink,
               getTooltipItem: (group, _, rod, __) => BarTooltipItem(
                 currencyFmt.format(rod.toY.round()),
-                const TextStyle(
-                    color: AppColors.paper,
+                TextStyle(
+                    color: context.colors.paper,
                     fontSize: 11,
                     fontWeight: FontWeight.w600),
               ),
@@ -716,8 +734,8 @@ class _WeekdaySection extends StatelessWidget {
                   final i = value.toInt();
                   if (i < 0 || i >= _labels.length) return const SizedBox();
                   return Text(_labels[i],
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.inkSoft));
+                      style: TextStyle(
+                          fontSize: 11, color: context.colors.inkSoft));
                 },
               ),
             ),
@@ -726,7 +744,7 @@ class _WeekdaySection extends StatelessWidget {
             show: true,
             drawVerticalLine: false,
             getDrawingHorizontalLine: (_) =>
-                const FlLine(color: AppColors.rule, strokeWidth: 1),
+                FlLine(color: context.colors.rule, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           barGroups: List.generate(7, (i) {
@@ -736,7 +754,7 @@ class _WeekdaySection extends StatelessWidget {
               barRods: [
                 BarChartRodData(
                   toY: totals[i].toDouble(),
-                  color: isMax ? AppColors.green : AppColors.rule,
+                  color: isMax ? context.colors.green : context.colors.rule,
                   width: 22,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(4)),
@@ -765,15 +783,17 @@ class _TopTransactionsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (transactions.isEmpty) {
-      return const Text('Sin gastos registrados este mes.',
-          style: TextStyle(color: AppColors.inkSoft, fontSize: 12));
+      return Text('Sin gastos registrados este mes.',
+          style: TextStyle(color: context.colors.inkSoft, fontSize: 12));
     }
     final top = [...transactions]..sort((a, b) => b.amount.compareTo(a.amount));
 
     return Column(
       children: top.take(5).map((t) {
         final cat = categoriesById[t.categoryId];
-        final color = cat != null ? Color(cat.colorValue) : AppColors.inkSoft;
+        final color = cat != null
+            ? context.colors.category(cat.colorValue)
+            : context.colors.inkSoft;
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(
@@ -812,8 +832,8 @@ class _TopTransactionsSection extends StatelessWidget {
                     ),
                     Text(
                       DateFormat('d MMM', 'es_CL').format(t.date),
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.inkSoft),
+                      style: TextStyle(
+                          fontSize: 11, color: context.colors.inkSoft),
                     ),
                   ],
                 ),
@@ -824,7 +844,7 @@ class _TopTransactionsSection extends StatelessWidget {
                 style: appAmountTextStyle.copyWith(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.ink),
+                    color: context.colors.ink),
               ),
             ],
           ),
@@ -860,20 +880,20 @@ class _MonthBarsSection extends ConsumerWidget {
       height: 200,
       padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
       decoration: BoxDecoration(
-        color: AppColors.paperDeep,
+        color: context.colors.paperDeep,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.rule),
+        border: Border.all(color: context.colors.rule),
       ),
       child: BarChart(
         BarChartData(
           maxY: maxVal > 0 ? maxVal * 1.25 : 100,
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => AppColors.ink,
+              getTooltipColor: (_) => context.colors.ink,
               getTooltipItem: (group, _, rod, __) => BarTooltipItem(
                 currencyFmt.format(rod.toY.round()),
-                const TextStyle(
-                    color: AppColors.paper,
+                TextStyle(
+                    color: context.colors.paper,
                     fontSize: 11,
                     fontWeight: FontWeight.w600),
               ),
@@ -898,8 +918,8 @@ class _MonthBarsSection extends ConsumerWidget {
                   final cap = label[0].toUpperCase() +
                       label.substring(1, label.length.clamp(1, 3));
                   return Text(cap,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.inkSoft));
+                      style: TextStyle(
+                          fontSize: 11, color: context.colors.inkSoft));
                 },
               ),
             ),
@@ -908,7 +928,7 @@ class _MonthBarsSection extends ConsumerWidget {
             show: true,
             drawVerticalLine: false,
             getDrawingHorizontalLine: (_) =>
-                const FlLine(color: AppColors.rule, strokeWidth: 1),
+                FlLine(color: context.colors.rule, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           barGroups: List.generate(months.length, (i) {
@@ -918,7 +938,7 @@ class _MonthBarsSection extends ConsumerWidget {
               barRods: [
                 BarChartRodData(
                   toY: totals[i].toDouble(),
-                  color: isLast ? AppColors.green : AppColors.rule,
+                  color: isLast ? context.colors.green : context.colors.rule,
                   width: 28,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(4)),

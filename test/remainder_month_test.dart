@@ -2,7 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:peso_a_peso/core/startup/remainder_prompt.dart';
 
 void main() {
-  test('evalúa el último mes en que se abrió la app, no el mes calendario previo',
+  test(
+      'evalúa el último mes en que se abrió la app, no el mes calendario previo',
       () {
     // Abrió por última vez en agosto y ahora es octubre: evalúa agosto.
     expect(remainderMonthFor(202608, 202610), DateTime(2026, 8));

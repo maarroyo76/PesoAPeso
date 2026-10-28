@@ -32,11 +32,12 @@ void main() {
   Future<void> expectFriendlyFailure(Uint8List bytes, String message) async {
     await expectLater(
       repo.restoreFromBytes(bytes),
-      throwsA(isA<FormatException>()
-          .having((e) => e.message, 'message', message)),
+      throwsA(
+          isA<FormatException>().having((e) => e.message, 'message', message)),
     );
-    // Los datos de siempre (las 6 categorías seed) siguen intactos.
-    expect(await db.select(db.categories).get(), hasLength(6));
+    // Los datos de siempre (el catálogo seed) siguen intactos.
+    expect(await db.select(db.categories).get(),
+        hasLength(kDefaultCategories.length));
   }
 
   test('archivo vacío', () async {
@@ -47,12 +48,13 @@ void main() {
     await expectFriendlyFailure(
         Uint8List.fromList(utf8.encode('esto no es json')),
         kBackupNotARespaldoMessage);
-    await expectFriendlyFailure(
-        Uint8List.fromList([0xff, 0xfe, 0x00, 0x80]), kBackupNotARespaldoMessage);
+    await expectFriendlyFailure(Uint8List.fromList([0xff, 0xfe, 0x00, 0x80]),
+        kBackupNotARespaldoMessage);
   });
 
   test('JSON válido pero de otra cosa', () async {
-    await expectFriendlyFailure(_json({'hola': 'mundo'}), kBackupNotARespaldoMessage);
+    await expectFriendlyFailure(
+        _json({'hola': 'mundo'}), kBackupNotARespaldoMessage);
     await expectFriendlyFailure(_json([1, 2, 3]), kBackupNotARespaldoMessage);
   });
 
@@ -61,8 +63,8 @@ void main() {
     final good = await db.exportAllData();
 
     final orphan = jsonDecode(jsonEncode(good)) as Map<String, dynamic>;
-    (orphan['transactions'] as List).add(
-        {'id': 1, 'categoryId': 'no_existe', 'amount': 5, 'date': 0});
+    (orphan['transactions'] as List)
+        .add({'id': 1, 'categoryId': 'no_existe', 'amount': 5, 'date': 0});
     await expectFriendlyFailure(_json(orphan), kBackupCorruptMessage);
 
     final badTypes = jsonDecode(jsonEncode(good)) as Map<String, dynamic>;
@@ -91,6 +93,7 @@ void main() {
   test('un respaldo válido se restaura', () async {
     final good = await db.exportAllData();
     expect(await repo.restoreFromBytes(_json(good)), isTrue);
-    expect(await db.select(db.categories).get(), hasLength(6));
+    expect(await db.select(db.categories).get(),
+        hasLength(kDefaultCategories.length));
   });
 }

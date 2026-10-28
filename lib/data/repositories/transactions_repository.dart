@@ -6,10 +6,25 @@ class TransactionsRepository {
   TransactionsRepository(this._db);
   final AppDatabase _db;
 
+  Future<List<Transaction>> transactionsSince(DateTime from) =>
+      _db.transactionsSince(from);
+
+  Future<Transaction?> transactionById(int id) => _db.transactionById(id);
+
+  /// UX06: todos los gastos, del más reciente.
+  Stream<List<Transaction>> watchAll() => _db.watchAllTransactions();
+
   Stream<List<Transaction>> watchTransactionsForMonth(DateTime month) =>
       _db.watchTransactionsForMonth(month);
 
   Future<void> deleteTransaction(int id) => _db.deleteTransaction(id);
+
+  /// RF37: "valió la pena" (true), "no tanto" (false) o sin revisar (null).
+  Future<void> setWorthIt(int id, bool? worthIt) => _db.setWorthIt(id, worthIt);
+
+  /// UX02: borra y devuelve cómo deshacerlo.
+  Future<Future<void> Function()> deleteTransactionUndoable(int id) =>
+      _db.deleteTransactionUndoable(id);
 
   Future<void> updateTransaction({
     required int id,
@@ -18,6 +33,8 @@ class TransactionsRepository {
     required DateTime date,
     String note = '',
     bool isRecurring = false,
+    // Requerido aunque sea nullable: omitirlo borraría el método del gasto.
+    required int? paymentMethodId,
   }) {
     return _db.updateTransaction(
       id: id,
@@ -26,15 +43,19 @@ class TransactionsRepository {
       date: date,
       note: note,
       isRecurring: isRecurring,
+      paymentMethodId: paymentMethodId,
     );
   }
 
-  Future<void> addTransaction({
+  /// Devuelve el id del gasto, para poder deshacerlo (UX01).
+  Future<int> addTransaction({
     required String categoryId,
     required int amount,
     required DateTime date,
     String note = '',
     bool isRecurring = false,
+    int? recurringTemplateId,
+    int? paymentMethodId,
   }) {
     return _db.into(_db.transactions).insert(
           TransactionsCompanion.insert(
@@ -43,7 +64,19 @@ class TransactionsRepository {
             date: date,
             note: Value(note),
             isRecurring: Value(isRecurring),
+            recurringTemplateId: Value(recurringTemplateId),
+            paymentMethodId: Value(paymentMethodId),
           ),
         );
+  }
+
+  /// UX03: categoría del último gasto registrado (por orden de registro, no
+  /// por fecha del gasto), para preseleccionarla en Agregar.
+  Future<String?> lastUsedCategoryId() async {
+    final last = await (_db.select(_db.transactions)
+          ..orderBy([(t) => OrderingTerm.desc(t.id)])
+          ..limit(1))
+        .getSingleOrNull();
+    return last?.categoryId;
   }
 }

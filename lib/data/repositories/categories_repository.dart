@@ -27,6 +27,7 @@ class CategoriesRepository {
   Future<bool> canDeleteCategory(String id) async {
     if ((await _db.countTransactionsForCategory(id)) != 0) return false;
     if ((await _db.countRecurringTemplatesForCategory(id)) != 0) return false;
+    if ((await _db.countInstallmentPlansForCategory(id)) != 0) return false;
     if ((await _db.countQuickExpenseTemplatesForCategory(id)) != 0) {
       return false;
     }
@@ -34,6 +35,20 @@ class CategoriesRepository {
   }
 
   Future<void> deleteCategory(String id) => _db.deleteCategory(id);
+
+  /// RF53: archivar una categoría con historial; devuelve cómo deshacerlo.
+  Future<Future<void> Function()> archiveCategory(String id) =>
+      _db.archiveCategory(id);
+
+  Future<void> unarchiveCategory(String id) => _db.unarchiveCategory(id);
+
+  /// Onboarding: activa solo [activeIds] y archiva las demás.
+  Future<void> setActiveCategories(Set<String> activeIds) =>
+      _db.setActiveCategories(activeIds);
+
+  /// RF54: fusionar [fromId] en [intoId]; devuelve cuántos gastos se movieron.
+  Future<int> mergeCategory(String fromId, String intoId) =>
+      _db.mergeCategory(fromId, intoId);
 
   Stream<List<CategoryBudget>> watchAllBudgets() => _db.watchAllBudgets();
 
@@ -48,4 +63,19 @@ class CategoriesRepository {
 
   Future<void> setMonthlyBudgetForMonth(DateTime month, int amount) =>
       _db.setMonthlyBudgetForMonth(month, amount);
+
+  /// RF50: ajustes de presupuesto que valen solo para su mes.
+  Stream<List<MonthlyAdjustment>> watchAllAdjustments() =>
+      _db.watchAllAdjustments();
+
+  Future<void> addAdjustment({
+    required DateTime month,
+    String? categoryId,
+    required int amount,
+    required String reason,
+  }) =>
+      _db.insertAdjustment(
+          month: month, categoryId: categoryId, amount: amount, reason: reason);
+
+  Future<void> deleteAdjustment(int id) => _db.deleteAdjustment(id);
 }

@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Peso a Peso usa la cámara para leer el timbre de tus boletas. Las imágenes no salen del teléfono.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Peso a Peso</string>
 	<key>CFBundleExecutable</key>

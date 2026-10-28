@@ -28,7 +28,9 @@ class RuledPaperBackground extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: CustomPaint(painter: _RuledLinesPainter(spacing: spacing)),
+            child: CustomPaint(
+                painter: _RuledLinesPainter(
+                    spacing: spacing, color: context.colors.rule)),
           ),
           Padding(padding: padding, child: child),
         ],
@@ -38,13 +40,14 @@ class RuledPaperBackground extends StatelessWidget {
 }
 
 class _RuledLinesPainter extends CustomPainter {
-  _RuledLinesPainter({required this.spacing});
+  _RuledLinesPainter({required this.spacing, required this.color});
   final double spacing;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.rule.withValues(alpha: 0.12)
+      ..color = color.withValues(alpha: 0.12)
       ..strokeWidth = 1;
     for (double y = spacing; y < size.height; y += spacing) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
@@ -53,7 +56,7 @@ class _RuledLinesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RuledLinesPainter oldDelegate) =>
-      oldDelegate.spacing != spacing;
+      oldDelegate.spacing != spacing || oldDelegate.color != color;
 }
 
 /// El "cuadre": cuando un libro contable cierra una suma, se traza una
@@ -66,6 +69,8 @@ class LedgerCuadreBar extends StatelessWidget {
     required this.ratio,
     required this.color,
     this.height = 18,
+    this.semanticsLabel,
+    this.semanticsValue,
     super.key,
   });
 
@@ -73,8 +78,22 @@ class LedgerCuadreBar extends StatelessWidget {
   final Color color;
   final double height;
 
+  /// UX08: qué mide la barra y su valor, para el lector de pantalla (un
+  /// CustomPaint no expone nada por sí solo). Sin valor, se lee el
+  /// porcentaje de [ratio].
+  final String? semanticsLabel;
+  final String? semanticsValue;
+
   @override
   Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticsLabel,
+      value: semanticsValue ?? '${(ratio.clamp(0.0, 1.0) * 100).round()}%',
+      child: _bar(),
+    );
+  }
+
+  Widget _bar() {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: ratio.clamp(0.0, 1.0)),
       duration: const Duration(milliseconds: 480),
@@ -82,16 +101,20 @@ class LedgerCuadreBar extends StatelessWidget {
       builder: (context, value, _) => SizedBox(
         width: double.infinity,
         height: height,
-        child: CustomPaint(painter: _CuadrePainter(ratio: value, color: color)),
+        child: CustomPaint(
+            painter: _CuadrePainter(
+                ratio: value, color: color, ruleColor: context.colors.rule)),
       ),
     );
   }
 }
 
 class _CuadrePainter extends CustomPainter {
-  _CuadrePainter({required this.ratio, required this.color});
+  _CuadrePainter(
+      {required this.ratio, required this.color, required this.ruleColor});
   final double ratio;
   final Color color;
+  final Color ruleColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -99,7 +122,7 @@ class _CuadrePainter extends CustomPainter {
     final baseY = size.height - 4;
 
     final basePaint = Paint()
-      ..color = AppColors.rule
+      ..color = ruleColor
       ..strokeWidth = 1;
     canvas.drawLine(Offset(0, baseY), Offset(w, baseY), basePaint);
 
@@ -128,5 +151,7 @@ class _CuadrePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CuadrePainter oldDelegate) =>
-      oldDelegate.ratio != ratio || oldDelegate.color != color;
+      oldDelegate.ratio != ratio ||
+      oldDelegate.color != color ||
+      oldDelegate.ruleColor != ruleColor;
 }

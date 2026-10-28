@@ -5,5 +5,6 @@ class SettingsRepository {
   final AppDatabase _db;
 
   Future<String?> get(String key) => _db.getSetting(key);
+  Stream<String?> watch(String key) => _db.watchSetting(key);
   Future<void> set(String key, String value) => _db.setSetting(key, value);
 }

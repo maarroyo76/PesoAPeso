@@ -1,0 +1,3 @@
+# Un test colgado (p. ej. un stream de Drift esperando bajo el reloj falso)
+# falla a los 60 s en vez de bloquear la corrida 10 minutos.
+timeout: 60s
