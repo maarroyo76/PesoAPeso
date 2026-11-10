@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RF39: mismos colores que AppPalette.dark (core/theme/app_theme.dart). -->
+<resources>
+    <color name="widget_paper">#1B1520</color>
+    <color name="widget_paper_deep">#262030</color>
+    <color name="widget_rule">#4E4259</color>
+    <color name="widget_ink">#EDE4F4</color>
+    <color name="widget_ink_soft">#B6A6C3</color>
+</resources>

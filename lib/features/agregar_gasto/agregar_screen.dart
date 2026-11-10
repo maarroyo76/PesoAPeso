@@ -82,6 +82,106 @@ Future<void> showRegisterSheet(BuildContext context) {
   );
 }
 
+/// UX01: un toque registra el gasto de inmediato; el aviso posterior
+/// permite deshacerlo. Devuelve true para que el chip muestre "✓ Listo".
+///
+/// RF46: el mismo aviso ofrece ×2, ×3 o más, que corrigen ese gasto (sigue
+/// siendo uno solo, por el monto multiplicado). Así ×1 toma un toque y ×2,
+/// dos, sin preguntar la cantidad antes de cada registro.
+///
+/// También lo usa el widget de inicio (RF39): un toque en el widget abre la
+/// app y registra el acceso con este mismo aviso.
+Future<bool> registerQuickExpense(
+    BuildContext context, WidgetRef ref, QuickExpenseTemplate qa,
+    {VoidCallback? onRegistered}) async {
+  final date = DateTime.now();
+  final txRepo = ref.read(transactionsRepositoryProvider);
+  // UX04: la hoja de registro se cierra después de registrar, pero el
+  // aviso con ×2/×3 sigue abierto: sus diálogos y alertas usan el
+  // contexto del navegador raíz, que sigue montado.
+  final host = Navigator.of(context, rootNavigator: true).context;
+  final int id;
+  final int? paymentMethodId;
+  try {
+    // RF32: el acceso rápido sigue siendo de un toque; usa el último método
+    // de pago y se puede cambiar desde el detalle del gasto.
+    paymentMethodId = await ref
+        .read(paymentMethodsRepositoryProvider)
+        .lastUsedPaymentMethodId();
+    id = await txRepo.addTransaction(
+      categoryId: qa.categoryId,
+      amount: qa.amount,
+      date: date,
+      note: qa.label,
+      paymentMethodId: paymentMethodId,
+    );
+  } catch (e) {
+    // UX09: mensaje para el usuario en vez del error técnico.
+    debugPrint('Acceso rápido: $e');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:
+            const Text('No se pudo registrar el gasto. Inténtalo de nuevo.'),
+        backgroundColor: context.colors.rust,
+      ));
+    }
+    return false;
+  }
+  HapticFeedback.lightImpact();
+  if (!context.mounted) return true;
+  // El aviso se actualiza en su lugar al cambiar la cantidad, sin cerrarse.
+  final quantity = ValueNotifier(1);
+  Future<void> setQuantity(int n) async {
+    if (n == quantity.value) return;
+    quantity.value = n;
+    await txRepo.updateTransaction(
+      id: id,
+      categoryId: qa.categoryId,
+      amount: qa.amount * n,
+      date: date,
+      note: quickAddNote(qa.label, n),
+      paymentMethodId: paymentMethodId,
+    );
+    HapticFeedback.selectionClick();
+    final alerts =
+        await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
+    if (host.mounted) showBudgetAlertBanner(host, alerts);
+  }
+
+  showUndoSnackBar(
+    ScaffoldMessenger.of(context),
+    onUndo: () => txRepo.deleteTransaction(id),
+    // Un poco más que el aviso normal: da tiempo de elegir la cantidad.
+    duration: const Duration(seconds: 6),
+    content: ValueListenableBuilder<int>(
+      valueListenable: quantity,
+      builder: (_, n, __) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Registrado · ${quickAddNote(qa.label, n)} '
+              '${currencyFmt.format(qa.amount * n)}'),
+          _QuantityPicker(
+            selected: n,
+            onSelected: setQuantity,
+            onMore: () async {
+              final more = await _askQuantity(host, qa);
+              if (more != null) await setQuantity(more);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+  // RF18/RF55: aviso inmediato en pantalla si este gasto deja la categoría
+  // o el presupuesto total en 80% o más.
+  final alerts =
+      await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
+  if (host.mounted) showBudgetAlertBanner(host, alerts);
+  onRegistered?.call();
+  return true;
+}
+
 class AgregarScreen extends ConsumerWidget {
   const AgregarScreen({super.key, this.active = false, this.onRegistered});
 
@@ -91,101 +191,9 @@ class AgregarScreen extends ConsumerWidget {
   /// UX04: se llama tras registrar un gasto, ya mostrado su aviso.
   final VoidCallback? onRegistered;
 
-  /// UX01: un toque registra el gasto de inmediato; el aviso posterior
-  /// permite deshacerlo. Devuelve true para que el chip muestre "✓ Listo".
-  ///
-  /// RF46: el mismo aviso ofrece ×2, ×3 o más, que corrigen ese gasto (sigue
-  /// siendo uno solo, por el monto multiplicado). Así ×1 toma un toque y ×2,
-  /// dos, sin preguntar la cantidad antes de cada registro.
   Future<bool> _handleQuickAdd(
-      BuildContext context, WidgetRef ref, QuickExpenseTemplate qa) async {
-    final date = DateTime.now();
-    final txRepo = ref.read(transactionsRepositoryProvider);
-    // UX04: la hoja de registro se cierra después de registrar, pero el
-    // aviso con ×2/×3 sigue abierto: sus diálogos y alertas usan el
-    // contexto del navegador raíz, que sigue montado.
-    final host = Navigator.of(context, rootNavigator: true).context;
-    final int id;
-    final int? paymentMethodId;
-    try {
-      // RF32: el acceso rápido sigue siendo de un toque; usa el último método
-      // de pago y se puede cambiar desde el detalle del gasto.
-      paymentMethodId = await ref
-          .read(paymentMethodsRepositoryProvider)
-          .lastUsedPaymentMethodId();
-      id = await txRepo.addTransaction(
-        categoryId: qa.categoryId,
-        amount: qa.amount,
-        date: date,
-        note: qa.label,
-        paymentMethodId: paymentMethodId,
-      );
-    } catch (e) {
-      // UX09: mensaje para el usuario en vez del error técnico.
-      debugPrint('Acceso rápido: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              const Text('No se pudo registrar el gasto. Inténtalo de nuevo.'),
-          backgroundColor: context.colors.rust,
-        ));
-      }
-      return false;
-    }
-    HapticFeedback.lightImpact();
-    if (!context.mounted) return true;
-    // El aviso se actualiza en su lugar al cambiar la cantidad, sin cerrarse.
-    final quantity = ValueNotifier(1);
-    Future<void> setQuantity(int n) async {
-      if (n == quantity.value) return;
-      quantity.value = n;
-      await txRepo.updateTransaction(
-        id: id,
-        categoryId: qa.categoryId,
-        amount: qa.amount * n,
-        date: date,
-        note: quickAddNote(qa.label, n),
-        paymentMethodId: paymentMethodId,
-      );
-      HapticFeedback.selectionClick();
-      final alerts =
-          await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
-      if (host.mounted) showBudgetAlertBanner(host, alerts);
-    }
-
-    showUndoSnackBar(
-      ScaffoldMessenger.of(context),
-      onUndo: () => txRepo.deleteTransaction(id),
-      // Un poco más que el aviso normal: da tiempo de elegir la cantidad.
-      duration: const Duration(seconds: 6),
-      content: ValueListenableBuilder<int>(
-        valueListenable: quantity,
-        builder: (_, n, __) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Registrado · ${quickAddNote(qa.label, n)} '
-                '${currencyFmt.format(qa.amount * n)}'),
-            _QuantityPicker(
-              selected: n,
-              onSelected: setQuantity,
-              onMore: () async {
-                final more = await _askQuantity(host, qa);
-                if (more != null) await setQuantity(more);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-    // RF18/RF55: aviso inmediato en pantalla si este gasto deja la categoría
-    // o el presupuesto total en 80% o más.
-    final alerts =
-        await checkBudgetAlerts(ref, categoryId: qa.categoryId, date: date);
-    if (host.mounted) showBudgetAlertBanner(host, alerts);
-    onRegistered?.call();
-    return true;
-  }
+          BuildContext context, WidgetRef ref, QuickExpenseTemplate qa) =>
+      registerQuickExpense(context, ref, qa, onRegistered: onRegistered);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

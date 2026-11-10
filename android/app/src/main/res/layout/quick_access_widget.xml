@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RF39: widget de accesos rápidos. Paleta de la app (tinta y papel). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="@string/widget_title"
+            android:textColor="@color/widget_ink_soft"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/widget_register"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/widget_button"
+            android:contentDescription="@string/widget_register_description"
+            android:gravity="center"
+            android:minWidth="48dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/widget_register"
+            android:textColor="@color/widget_paper"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="@string/widget_empty"
+        android:textColor="@color/widget_ink_soft"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/row_0"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/quick_0"
+            style="@style/WidgetQuickChip"
+            android:layout_marginEnd="4dp" />
+
+        <TextView
+            android:id="@+id/quick_1"
+            style="@style/WidgetQuickChip"
+            android:layout_marginStart="4dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/row_1"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/quick_2"
+            style="@style/WidgetQuickChip"
+            android:layout_marginEnd="4dp" />
+
+        <TextView
+            android:id="@+id/quick_3"
+            style="@style/WidgetQuickChip"
+            android:layout_marginStart="4dp" />
+    </LinearLayout>
+</LinearLayout>

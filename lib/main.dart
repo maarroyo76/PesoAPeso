@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'core/home_widget/home_widget_sync.dart';
+import 'core/home_widget/quick_widget.dart';
 import 'core/notifications/habitual_reminders.dart';
 import 'core/notifications/notification_service.dart';
 import 'core/providers/app_providers.dart';
@@ -296,6 +300,52 @@ class _RootShellState extends ConsumerState<RootShell>
     // RF12: al abrir la app, genera la ocurrencia del mes actual de
     // cualquier plantilla recurrente que todavía no la tenga.
     WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupChecks());
+
+    // RF39: el widget de inicio muestra los accesos rápidos; se actualiza
+    // cada vez que cambian. Sus toques abren la app con un enlace.
+    ref.listenManual(quickExpenseTemplatesProvider, (_, next) {
+      final templates = next.valueOrNull;
+      if (templates != null) syncQuickWidget(templates);
+    }, fireImmediately: true);
+    _widgetClicks = widgetClicks().listen(_onWidgetUri);
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) async => _onWidgetUri(await initialWidgetUri()));
+  }
+
+  StreamSubscription<Uri?>? _widgetClicks;
+  Uri? _lastWidgetUri;
+  DateTime? _lastWidgetAt;
+
+  /// RF39: un toque en el widget. Un acceso rápido se registra de inmediato
+  /// (con el aviso para deshacer o elegir ×2, ×3); "+" abre la hoja de
+  /// registro.
+  Future<void> _onWidgetUri(Uri? uri) async {
+    final action = parseWidgetUri(uri);
+    if (action == null || !mounted) return;
+    // El mismo toque puede llegar por el arranque y por el stream.
+    final now = DateTime.now();
+    if (uri == _lastWidgetUri &&
+        _lastWidgetAt != null &&
+        now.difference(_lastWidgetAt!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastWidgetUri = uri;
+    _lastWidgetAt = now;
+    switch (action) {
+      case OpenRegisterAction():
+        await showRegisterSheet(context);
+      case QuickAddAction(:final templateId):
+        final templates =
+            await ref.read(quickExpenseTemplatesRepositoryProvider).getAll();
+        if (!mounted) return;
+        final template = templates.where((t) => t.id == templateId).firstOrNull;
+        if (template == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ese acceso rápido ya no existe.')));
+          return;
+        }
+        await registerQuickExpense(context, ref, template);
+    }
   }
 
   bool _checking = false;
@@ -432,6 +482,7 @@ class _RootShellState extends ConsumerState<RootShell>
 
   @override
   void dispose() {
+    _widgetClicks?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     NotificationService.instance.onForegroundResponse = null;
     _fadeController.dispose();
