@@ -16,6 +16,7 @@ import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import '../metodos_pago/payment_method_labels.dart';
+import '../lista_espera/wish_decision_card.dart';
 import 'habitual_pending_card.dart';
 import 'transaction_detail_sheet.dart';
 import '../../core/utils/weekly_review.dart';
@@ -176,6 +177,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
         SwipeHint(visible: _showHint == true),
         // RF49: días de gastos habituales sin confirmar.
         if (_isCurrentMonth) const HabitualPendingCard(),
+        // RF62: deseos de la lista de espera con el plazo cumplido.
+        if (_isCurrentMonth) const DueWishesCards(),
         if (_isCurrentMonth) ..._weeklyReview(transactions),
         const SizedBox(height: 24),
         const SectionLabel('Por categoría'),

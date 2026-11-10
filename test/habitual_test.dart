@@ -301,7 +301,7 @@ void main() {
       await repo.registerHabitual(t, _monday);
       await repo.skipHabitual(t.id, DateTime(2025, 10, 21));
       final data = await db.exportAllData();
-      expect(data['version'], 3);
+      expect(data['version'], kBackupFormatVersion);
       validateBackupData(data);
 
       await db.restoreAllData(data);

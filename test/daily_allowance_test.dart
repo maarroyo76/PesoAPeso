@@ -69,6 +69,9 @@ void main() {
       await tester.pumpWidget(ProviderScope(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
+          // RF62: sin deseos; la base real dejaría timers de sus streams.
+          wishlistProvider
+              .overrideWith((ref) => Stream.value(<WishlistItem>[])),
           settingProvider.overrideWith((ref, key) => Stream.value(null)),
           paymentMethodsProvider
               .overrideWith((ref) => Stream.value(<PaymentMethod>[])),

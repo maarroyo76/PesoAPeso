@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../categorias/categorias_screen.dart';
 import '../cuotas/cuotas_screen.dart';
+import '../lista_espera/lista_espera_screen.dart';
 import '../metodos_pago/payment_methods_screen.dart';
 import '../recurrentes/recurrentes_screen.dart';
 import '../respaldo/respaldo_screen.dart';
@@ -41,6 +42,13 @@ class AjustesScreen extends StatelessWidget {
             title: 'Compras en cuotas',
             subtitle: 'Cuotas pagadas y pendientes de cada compra',
             screen: CuotasScreen(),
+          ),
+          Divider(height: 1, indent: 72),
+          _SettingsTile(
+            icon: Icons.hourglass_empty,
+            title: 'Lista de espera',
+            subtitle: 'Compras que decidiste pensar antes de hacer',
+            screen: ListaEsperaScreen(),
           ),
           Divider(height: 1, indent: 72),
           _SettingsTile(

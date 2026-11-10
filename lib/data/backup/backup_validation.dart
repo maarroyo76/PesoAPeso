@@ -8,7 +8,11 @@
 /// v3 (RF47): agrega `habitualOccurrences` y en `recurringTemplates` el modo
 /// y los datos del gasto habitual. Una versión anterior de la app tomaría
 /// los gastos habituales por pagos mensuales, por eso sube la versión.
-const kBackupFormatVersion = 3;
+///
+/// v4 (RF61): agrega `wishlistItems`. Es una tabla nueva y opcional: una
+/// versión anterior la ignoraría sin dañar nada, pero perdería la lista de
+/// espera sin avisar, por eso sube la versión.
+const kBackupFormatVersion = 4;
 
 /// Tamaño máximo aceptado para un archivo de respaldo (un respaldo real pesa
 /// unos pocos MB incluso con años de gastos).
@@ -65,6 +69,7 @@ void validateBackupData(Object? decoded) {
     'paymentMethods',
     'installmentPlans',
     'habitualOccurrences',
+    'wishlistItems',
     'appSettings',
   ];
 
@@ -135,4 +140,13 @@ void validateBackupData(Object? decoded) {
   checkRefs('habitualOccurrences', 'templateId', templateIds);
   checkRefs('habitualOccurrences', 'transactionId', transactionIds,
       nullable: true);
+  final contributionIds = {
+    for (final r in rows('savingsContributions', mustExist: true)) r['id']
+  };
+  checkRefs('wishlistItems', 'categoryId', categoryIds, nullable: true);
+  checkRefs('wishlistItems', 'paymentMethodId', paymentMethodIds,
+      nullable: true);
+  checkRefs('wishlistItems', 'installmentPlanId', planIds, nullable: true);
+  checkRefs('wishlistItems', 'transactionId', transactionIds, nullable: true);
+  checkRefs('wishlistItems', 'contributionId', contributionIds, nullable: true);
 }

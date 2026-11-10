@@ -10,6 +10,7 @@ import '../../core/utils/formatting.dart';
 import '../../core/utils/installments.dart';
 import '../../core/utils/projection.dart';
 import '../../core/utils/purchase_simulation.dart';
+import '../../core/utils/wishlist.dart';
 import '../../core/widgets/load_error.dart';
 import '../../core/widgets/section_label.dart';
 import '../../core/widgets/undo_snack_bar.dart';
@@ -18,16 +19,21 @@ import '../agregar_gasto/expense_form.dart';
 import '../categorias/category_filters.dart';
 import '../metodos_pago/payment_method_labels.dart';
 import '../metodos_pago/payment_methods_screen.dart';
+import '../lista_espera/lista_espera_screen.dart';
 
 /// RF57–RF60: simula una compra contra la proyección de los meses
 /// siguientes, la compara con otras formas de pago y, si el usuario decide
 /// comprar, la registra igual que el formulario de gasto. Nada se escribe en
-/// la base antes de "Comprar así".
+/// la base antes de "Comprar así" o "Esperar" (RF61).
 class SimuladorScreen extends ConsumerStatefulWidget {
-  const SimuladorScreen({super.key, this.today});
+  const SimuladorScreen({super.key, this.today, this.wish});
 
   /// Fecha de referencia; solo para tests. Por defecto, ahora.
   final DateTime? today;
+
+  /// RF62: deseo de la lista de espera que se está decidiendo. Llena el
+  /// formulario con sus datos y, al comprar, queda marcado como comprado.
+  final WishlistItem? wish;
 
   @override
   ConsumerState<SimuladorScreen> createState() => _SimuladorScreenState();
@@ -48,6 +54,24 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
   @override
   void initState() {
     super.initState();
+    final wish = widget.wish;
+    if (wish != null) {
+      _amountController.text = formatAmountInput(wish.amount);
+      _noteController.text = wish.name;
+      if (wish.installmentCount > 1) {
+        _countController.text = '${wish.installmentCount}';
+      }
+      if (wish.monthlyRate > 0) {
+        _rateController.text = '${wish.monthlyRate}'
+            .replaceAll(RegExp(r'\.0$'), '')
+            .replaceAll('.', ',');
+      }
+      _categoryId = wish.categoryId;
+      if (wish.paymentMethodId != null) {
+        _cardId = wish.paymentMethodId;
+        _userPickedCard = true;
+      }
+    }
     _preselectCard();
   }
 
@@ -110,7 +134,20 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
         adjustmentsAsync.error;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Simular una compra')),
+      appBar: AppBar(
+        title: Text(widget.wish == null
+            ? 'Simular una compra'
+            : 'Comprar "${widget.wish!.name}"'),
+        actions: [
+          if (widget.wish == null)
+            IconButton(
+              tooltip: 'Lista de espera',
+              icon: const Icon(Icons.hourglass_empty),
+              onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ListaEsperaScreen())),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: error != null
             ? LoadError(error)
@@ -383,7 +420,52 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
         Text(missing,
             style: TextStyle(fontSize: 13, color: context.colors.inkSoft)),
       ],
+      // RF60/RF61: en vez de comprar, dejarlo en la lista de espera.
+      if (widget.wish == null) ...[
+        const SizedBox(height: 12),
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: context.colors.ink,
+            side: BorderSide(color: context.colors.ink),
+            minimumSize: const Size.fromHeight(48),
+          ),
+          onPressed: _buying ? null : () => _wait(option, card),
+          child: const Text('Esperar'),
+        ),
+      ],
     ];
+  }
+
+  /// RF61: guarda la compra simulada en la lista de espera con el plazo que
+  /// elija el usuario.
+  Future<void> _wait(PurchaseOption option, PaymentMethod? card) async {
+    final note = _noteController.text.trim();
+    final choice = await showWaitSheet(context,
+        initialName: note.isEmpty
+            ? 'Compra de ${currencyFmt.format(option.principal)}'
+            : note);
+    if (choice == null || !mounted) return;
+    final repo = ref.read(wishlistRepositoryProvider);
+    final now = DateTime.now();
+    final dueAt = wishDueAt(now, choice.period);
+    final id = await repo.create(
+      name: choice.name,
+      amount: option.principal,
+      installmentCount: option.count,
+      monthlyRate: _rate ?? 0,
+      paymentMethodId: card?.id,
+      categoryId: _categoryId,
+      createdAt: now,
+      dueAt: dueAt,
+    );
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    showUndoSnackBar(
+      messenger,
+      message: 'En espera hasta el ${wishDueLabel(dueAt)}',
+      onUndo: () => repo.deleteUndoable(id),
+    );
   }
 
   /// RF60: registra la compra tal como lo haría el formulario de gasto: en
@@ -397,6 +479,8 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _buying = true);
     final UndoAction undo;
+    int? planIdForWish;
+    int? transactionIdForWish;
     if (option.isCash) {
       final txRepo = ref.read(transactionsRepositoryProvider);
       final id = await txRepo.addTransaction(
@@ -407,6 +491,7 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
         paymentMethodId: card?.id,
       );
       undo = () => txRepo.deleteTransaction(id);
+      transactionIdForWish = id;
     } else {
       final repo = ref.read(installmentsRepositoryProvider);
       final planId = await repo.createPlan(
@@ -418,6 +503,24 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
         purchaseDate: date,
       );
       undo = () => repo.deletePlan(planId);
+      planIdForWish = planId;
+    }
+    // RF62: el deseo queda comprado, enlazado a lo que se creó. Deshacer lo
+    // vuelve a la espera antes de borrar la compra.
+    final wish = widget.wish;
+    final UndoAction undoAll;
+    if (wish != null) {
+      final wishes = ref.read(wishlistRepositoryProvider);
+      await wishes.markBought(wish.id,
+          installmentPlanId: planIdForWish,
+          transactionId: transactionIdForWish,
+          at: date);
+      undoAll = () async {
+        await wishes.reset(wish.id);
+        await undo();
+      };
+    } else {
+      undoAll = undo;
     }
     final alerts =
         await checkBudgetAlerts(ref, categoryId: categoryId, date: date);
@@ -429,7 +532,7 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
       message: option.isCash
           ? 'Compra registrada'
           : 'Compra registrada en ${option.count} cuotas',
-      onUndo: undo,
+      onUndo: undoAll,
     );
   }
 }

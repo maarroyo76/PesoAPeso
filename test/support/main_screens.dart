@@ -177,6 +177,8 @@ Future<Future<void> Function()> pumpMainScreen(
   await tester.pumpWidget(ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
+      // RF62: sin deseos; la base real dejaría timers de sus streams.
+      wishlistProvider.overrideWith((ref) => Stream.value(<WishlistItem>[])),
       categoriesProvider.overrideWith((ref) => Stream.value(categories)),
       monthTransactionsProvider
           .overrideWith((ref, m) => Stream.value(txsFor(m))),

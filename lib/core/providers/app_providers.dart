@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/repositories/wishlist_repository.dart';
 import '../../data/repositories/backup_repository.dart';
 import '../../data/repositories/categories_repository.dart';
 import '../../data/repositories/installments_repository.dart';
@@ -110,6 +111,14 @@ final installmentPlansProvider = StreamProvider(
 /// Cuotas y prepagos de todos los planes (RF35/RF36).
 final installmentTransactionsProvider = StreamProvider((ref) =>
     ref.watch(installmentsRepositoryProvider).watchInstallmentTransactions());
+
+final wishlistRepositoryProvider = Provider<WishlistRepository>(
+  (ref) => WishlistRepository(ref.watch(appDatabaseProvider)),
+);
+
+/// RF61: todos los deseos de la lista de espera.
+final wishlistProvider =
+    StreamProvider((ref) => ref.watch(wishlistRepositoryProvider).watchAll());
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(appDatabaseProvider)),

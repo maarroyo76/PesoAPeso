@@ -356,3 +356,18 @@ ProjectionTail? summarizeTail(List<MonthProjection> months,
         rest.map((m) => m.availableWith).reduce((a, b) => a < b ? a : b),
   );
 }
+
+/// Cuántos meses quedan bajo cero con la compra y el mayor monto que falta
+/// en uno de ellos. Lo usan las alternativas (RF59) y la lista de espera
+/// (RF62) para decir en una línea si la compra alcanza.
+({int monthsBelowZero, int worstShortfall}) projectionOutcome(
+    Projection projection) {
+  var below = 0;
+  var worst = 0;
+  for (final m in projection.months) {
+    if (!m.belowZero) continue;
+    below++;
+    if (m.shortfall > worst) worst = m.shortfall;
+  }
+  return (monthsBelowZero: below, worstShortfall: worst);
+}
