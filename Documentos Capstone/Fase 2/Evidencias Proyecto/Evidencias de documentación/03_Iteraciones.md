@@ -104,4 +104,4 @@ pruebas de rendimiento.
 - Validar la función estrella con 10 a 15 personas del público objetivo.
 - Medir RNF06–RNF08 en un dispositivo de gama baja.
 - Notificación opcional al vencer un deseo (RF62).
-- Cerrar UX09: reemplazar los dos mensajes `Error: $e` que quedan.
+- Sumar el simulador y la lista de espera a los tests de accesibilidad (RNF22).
