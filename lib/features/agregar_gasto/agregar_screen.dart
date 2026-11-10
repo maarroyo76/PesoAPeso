@@ -14,6 +14,7 @@ import '../../data/local/app_database.dart';
 import 'expense_form.dart';
 import 'quick_suggestion.dart';
 import '../categorias/category_filters.dart';
+import '../simulador/simulador_screen.dart';
 
 /// UX04: el botón central abre esta hoja para registrar un gasto (acceso
 /// rápido o ingreso manual) desde cualquier pantalla; al registrar se
@@ -39,6 +40,18 @@ Future<void> showRegisterSheet(BuildContext context) {
                 Expanded(
                   child: Text('Registrar gasto',
                       style: Theme.of(sheetContext).textTheme.titleLarge),
+                ),
+                // RF57: antes de registrar, se puede simular la compra.
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                      foregroundColor: sheetContext.colors.ink),
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const SimuladorScreen()));
+                  },
+                  icon: const Icon(Icons.calculate_outlined),
+                  label: const Text('Simular'),
                 ),
                 IconButton(
                   tooltip: 'Cerrar',
