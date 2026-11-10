@@ -69,9 +69,19 @@ void main() {
 
     test('no se ofrece al registrar, salvo en algo que ya la usa', () {
       const active = Category(
-          id: 'a', name: 'A', colorValue: 1, iconKey: 'x', archived: false);
+          id: 'a',
+          name: 'A',
+          colorValue: 1,
+          iconKey: 'x',
+          archived: false,
+          essential: false);
       const old = Category(
-          id: 'b', name: 'B', colorValue: 1, iconKey: 'x', archived: true);
+          id: 'b',
+          name: 'B',
+          colorValue: 1,
+          iconKey: 'x',
+          archived: true,
+          essential: false);
       expect(selectableCategories([active, old]), [active]);
       expect(selectableCategories([active, old], keep: 'b'), [active, old]);
     });
@@ -172,6 +182,52 @@ void main() {
         await tester.pump(const Duration(milliseconds: 10));
       }
     }
+
+    testWidgets('RF65: el editor marca la categoría como esencial',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(() => tester.runAsync(db.close));
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        child: const MaterialApp(home: CategoriasScreen()),
+      ));
+      await settle(tester);
+      // Del catálogo: Salud es esencial y Ocio no.
+      expect(
+          find.descendant(
+              of: find.widgetWithText(ListTile, 'Salud'),
+              matching: find.text('Esencial')),
+          findsOneWidget);
+
+      await tester.tap(find.text('Ocio y salidas'));
+      await tester.pumpAndSettle();
+      final toggle = find.widgetWithText(SwitchListTile, 'Gasto esencial');
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pump();
+      await tester.tap(find.text('Guardar'));
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      final ocio = (await tester.runAsync(() => (db.select(db.categories)
+            ..where((c) => c.id.equals('ocio')))
+          .getSingle()))!;
+      expect(ocio.essential, isTrue);
+      final changes = (await tester
+          .runAsync(() => db.select(db.categoryEssentialChanges).get()))!;
+      expect(changes.single.categoryId, 'ocio');
+      expect(
+          find.descendant(
+              of: find.widgetWithText(ListTile, 'Ocio y salidas'),
+              matching: find.text('Esencial')),
+          findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 5));
+    });
 
     testWidgets('eliminar una con gastos ofrece archivarla', (tester) async {
       tester.view.physicalSize = const Size(800, 1600);

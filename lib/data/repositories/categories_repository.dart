@@ -10,9 +10,21 @@ class CategoriesRepository {
           {required String id,
           required String name,
           required int colorValue,
-          required String iconKey}) =>
+          required String iconKey,
+          bool essential = false}) =>
       _db.insertCategory(
-          id: id, name: name, colorValue: colorValue, iconKey: iconKey);
+          id: id,
+          name: name,
+          colorValue: colorValue,
+          iconKey: iconKey,
+          essential: essential);
+
+  /// RF65: marca la categoría como esencial o no, desde ahora.
+  Future<void> setEssential(String id, bool essential) =>
+      _db.setCategoryEssential(id, essential);
+
+  Stream<List<CategoryEssentialChange>> watchEssentialChanges() =>
+      _db.watchEssentialChanges();
 
   Future<void> updateCategoryInfo(String id,
           {required String name,

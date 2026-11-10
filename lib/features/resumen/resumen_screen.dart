@@ -16,6 +16,7 @@ import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
 import '../metodos_pago/payment_method_labels.dart';
+import '../lista_espera/wish_decision_card.dart';
 import 'habitual_pending_card.dart';
 import 'transaction_detail_sheet.dart';
 import '../../core/utils/weekly_review.dart';
@@ -176,6 +177,8 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
         SwipeHint(visible: _showHint == true),
         // RF49: días de gastos habituales sin confirmar.
         if (_isCurrentMonth) const HabitualPendingCard(),
+        // RF62: deseos de la lista de espera con el plazo cumplido.
+        if (_isCurrentMonth) const DueWishesCards(),
         if (_isCurrentMonth) ..._weeklyReview(transactions),
         const SizedBox(height: 24),
         const SectionLabel('Por categoría'),
@@ -227,22 +230,29 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     );
   }
 
-  /// RF37: una vez por semana, invitar a revisar los gastos de los últimos
-  /// 7 días. Se puede omitir.
+  /// RF37/RF66: cada semana o cada 15 días, invitar a revisar los gastos no
+  /// esenciales del período. Se puede omitir.
   List<Widget> _weeklyReview(List<Transaction> transactions) {
     final last = ref.watch(settingProvider(kWeeklyReviewSettingKey));
-    if (!last.hasValue) return const [];
+    final essential = ref.watch(essentialResolverProvider);
+    if (!last.hasValue || essential == null) return const [];
+    final days = ref.watch(reviewFrequencyProvider);
     final prevMonth = DateTime(_month.year, _month.month - 1);
     final now = DateTime.now();
     final candidates = weeklyReviewCandidates([
       ...ref.watch(monthTransactionsProvider(prevMonth)).valueOrNull ??
           const <Transaction>[],
       ...transactions,
-    ], now);
+    ], now, essential: essential, days: days);
     if (!weeklyReviewDue(
-        lastReview: last.value, today: now, candidates: candidates)) {
+        lastReview: last.value,
+        today: now,
+        candidates: candidates,
+        days: days)) {
       return const [];
     }
+    final period =
+        days == kWeeklyReviewDays ? 'esta semana' : 'estas dos semanas';
     return [
       const SizedBox(height: 16),
       Container(
@@ -261,8 +271,9 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
             const SizedBox(height: 4),
             Text(
               candidates.length == 1
-                  ? 'Revisa tu gasto de esta semana.'
-                  : 'Revisa tus ${candidates.length} gastos de esta semana.',
+                  ? 'Revisa tu gasto no esencial de $period.'
+                  : 'Revisa tus ${candidates.length} gastos no esenciales '
+                      'de $period.',
               style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
             ),
             const SizedBox(height: 8),

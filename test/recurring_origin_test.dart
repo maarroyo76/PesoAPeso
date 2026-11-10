@@ -25,7 +25,8 @@ void main() {
       name: 'Vivienda',
       colorValue: 0xFF3B6B78,
       iconKey: 'home',
-      archived: false);
+      archived: false,
+      essential: false);
   const template = RecurringTemplate(
     id: 7,
     categoryId: 'vivienda',

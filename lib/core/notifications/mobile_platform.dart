@@ -4,3 +4,6 @@ import 'mobile_platform_native.dart'
 /// true solo en Android e iOS, donde hay notificaciones programadas. Falso en
 /// web, escritorio y en los tests (que corren en el sistema anfitrión).
 bool get isMobileDevice => isMobilePlatform();
+
+/// RF39: true solo en Android, donde existe el widget de inicio.
+bool get isAndroidDevice => isAndroidPlatform();

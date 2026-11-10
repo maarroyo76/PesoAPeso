@@ -27,13 +27,15 @@ void main() {
         name: 'Alimentación',
         colorValue: 0xFF2F6F4E,
         iconKey: 'restaurant',
-        archived: false),
+        archived: false,
+        essential: false),
     Category(
         id: 'transporte',
         name: 'Transporte',
         colorValue: 0xFFB8842E,
         iconKey: 'directions_car',
-        archived: false),
+        archived: false,
+        essential: false),
   ];
   const quick = QuickExpenseTemplate(
       id: 1, label: 'Café', amount: 2500, categoryId: 'supermercado');

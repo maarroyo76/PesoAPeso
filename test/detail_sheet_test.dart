@@ -21,7 +21,8 @@ void main() {
         name: 'Ocio',
         colorValue: 0xFF6B3F5C,
         iconKey: 'theaters',
-        archived: false);
+        archived: false,
+        essential: false);
     final month = DateTime(2026, 10);
     final tx = Transaction(
         id: 1,

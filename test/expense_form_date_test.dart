@@ -27,7 +27,8 @@ void main() {
         name: 'Ocio',
         colorValue: 0xFF6B3F5C,
         iconKey: 'theaters',
-        archived: false);
+        archived: false,
+        essential: false);
     final old = DateTime.now().subtract(const Duration(days: 365 * 5));
 
     await tester.pumpWidget(ProviderScope(
@@ -74,7 +75,8 @@ void main() {
         name: 'Ocio',
         colorValue: 0xFF6B3F5C,
         iconKey: 'theaters',
-        archived: false);
+        archived: false,
+        essential: false);
     // Un gasto nuevo consulta la última categoría usada (UX03).
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);

@@ -29,8 +29,30 @@ class Categories extends Table {
   /// sigue en el historial y en Estadísticas, y se puede restaurar.
   BoolColumn get archived => boolean().withDefault(const Constant(false))();
 
+  /// RF65: gasto esencial (supermercado, arriendo, salud). La revisión
+  /// "¿Valió la pena?" pregunta solo por los no esenciales (RF66).
+  BoolColumn get essential => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// RF65: cada vez que el usuario cambia si una categoría es esencial. Así
+/// el cambio vale desde ese momento: los gastos anteriores se siguen
+/// clasificando como estaban (ver `core/utils/essential.dart`).
+class CategoryEssentialChanges extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get categoryId => text()();
+  DateTimeColumn get changedAt => dateTime()();
+
+  /// El valor nuevo.
+  BoolColumn get essential => boolean()();
+
+  @override
+  List<String> get customConstraints => [
+        'FOREIGN KEY (category_id) REFERENCES categories (id) '
+            'ON DELETE CASCADE',
+      ];
 }
 
 /// Presupuesto de una categoría, versionado por mes. Si un mes no tiene fila
@@ -291,6 +313,59 @@ class MonthlyAdjustments extends Table {
       ['FOREIGN KEY (category_id) REFERENCES categories (id)'];
 }
 
+/// Estados de un deseo de la lista de espera (`WishlistItems.status`).
+const kWishWaiting = 'waiting';
+const kWishBought = 'bought';
+const kWishDiscarded = 'discarded';
+const kWishSaved = 'saved';
+
+/// RF61: lista de espera. Un deseo es una compra no urgente que el usuario
+/// decide esperar antes de hacer. Guarda lo necesario para volver a
+/// simularla al vencer el plazo (RF62): precio, cuotas, tasa, tarjeta y
+/// categoría. Al decidir, queda enlazado a lo que se creó: el plan o el gasto
+/// si se compró, o el aporte a una meta si el monto se ahorró.
+class WishlistItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  IntColumn get amount => integer()();
+
+  /// Cuotas tentativas; 1 = al contado.
+  IntColumn get installmentCount => integer().withDefault(const Constant(1))();
+
+  /// Tasa de interés mensual en porcentaje, como en el simulador (RF57).
+  RealColumn get monthlyRate => real().withDefault(const Constant(0))();
+  IntColumn get paymentMethodId => integer().nullable()();
+  TextColumn get categoryId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Fin del plazo de espera (48 horas, 7 días o 30 días desde [createdAt]).
+  DateTimeColumn get dueAt => dateTime()();
+  TextColumn get status => text().withDefault(const Constant(kWishWaiting))();
+  DateTimeColumn get decidedAt => dateTime().nullable()();
+  IntColumn get installmentPlanId => integer().nullable()();
+  IntColumn get transactionId => integer().nullable()();
+  IntColumn get contributionId => integer().nullable()();
+
+  @override
+  List<String> get customConstraints => [
+        // Borrar la tarjeta o la categoría no debe impedirse por un deseo:
+        // el deseo queda sin ellas y se eligen de nuevo al comprar.
+        'FOREIGN KEY (payment_method_id) REFERENCES payment_methods (id) '
+            'ON DELETE SET NULL',
+        'FOREIGN KEY (category_id) REFERENCES categories (id) '
+            'ON DELETE SET NULL',
+        'FOREIGN KEY (installment_plan_id) REFERENCES installment_plans (id) '
+            'ON DELETE SET NULL',
+        'FOREIGN KEY (transaction_id) REFERENCES transactions (id) '
+            'ON DELETE SET NULL',
+        'FOREIGN KEY (contribution_id) REFERENCES savings_contributions (id) '
+            'ON DELETE SET NULL',
+        "CHECK (status IN ('waiting', 'bought', 'discarded', 'saved'))",
+        'CHECK (installment_count BETWEEN 1 AND 48)',
+        'CHECK (amount > 0)',
+      ];
+}
+
 /// Almacén simple clave/valor. Usado por RF15 para recordar el mes de la
 /// última sesión y no repetir el aviso de remanente.
 class AppSettings extends Table {
@@ -322,6 +397,17 @@ final _defaultQuickExpenseTemplates = [
 /// instalaciones nuevas (onCreate): la migración (from < 7) sigue creando
 /// exactamente los cinco accesos de siempre.
 const kBipTopUpLabel = 'Carga bip!';
+
+/// RF65: categorías del catálogo que vienen marcadas como esenciales.
+const kEssentialCategoryIds = {
+  'supermercado',
+  'transporte',
+  'vivienda',
+  'cuentas',
+  'salud',
+  'educacion',
+  'creditos',
+};
 
 /// Una categoría del catálogo por defecto.
 typedef DefaultCategory = ({
@@ -478,6 +564,8 @@ final _defaultQuickExpenseTemplatesForNewInstall = [
   PaymentMethods,
   InstallmentPlans,
   HabitualOccurrences,
+  WishlistItems,
+  CategoryEssentialChanges,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openDatabaseConnection());
@@ -486,7 +574,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 13;
 
   /// Columnas de Transactions agregadas en v10.
   List<GeneratedColumn> get _transactionColumnsV10 => [
@@ -529,6 +617,7 @@ class AppDatabase extends _$AppDatabase {
                   colorValue: c.colorValue,
                   iconKey: Value(c.iconKey),
                   archived: Value(!c.preselected),
+                  essential: Value(kEssentialCategoryIds.contains(c.id)),
                 ),
             ]);
             b.insertAll(quickExpenseTemplates,
@@ -560,8 +649,11 @@ class AppDatabase extends _$AppDatabase {
             // a v1 van en `newColumns` para que tomen su default. Si no,
             // SQLite copia su nombre entre comillas como texto ('archived').
             // ignore: experimental_member_use
-            await m.alterTable(TableMigration(categories,
-                newColumns: [categories.iconKey, categories.archived]));
+            await m.alterTable(TableMigration(categories, newColumns: [
+              categories.iconKey,
+              categories.archived,
+              categories.essential,
+            ]));
           }
           if (from < 3) {
             await m.createTable(recurringTemplates);
@@ -694,6 +786,21 @@ class AppDatabase extends _$AppDatabase {
                   newColumns: _recurringColumnsV11));
             }
             await m.createTable(habitualOccurrences);
+          }
+          if (from < 12) {
+            await m.createTable(wishlistItems); // RF61
+          }
+          if (from < 13) {
+            // RF65: las categorías del catálogo que son esenciales quedan
+            // marcadas; las propias del usuario, no. Si pasamos por
+            // `from < 2`, la tabla ya se reconstruyó con la columna.
+            if (from >= 2) {
+              await m.addColumn(categories, categories.essential);
+            }
+            await (update(categories)
+                  ..where((c) => c.id.isIn(kEssentialCategoryIds)))
+                .write(const CategoriesCompanion(essential: Value(true)));
+            await m.createTable(categoryEssentialChanges);
           }
         },
       );
@@ -901,10 +1008,37 @@ class AppDatabase extends _$AppDatabase {
       {required String id,
       required String name,
       required int colorValue,
-      required String iconKey}) {
+      required String iconKey,
+      bool essential = false}) {
     return into(categories).insert(CategoriesCompanion.insert(
-        id: id, name: name, colorValue: colorValue, iconKey: Value(iconKey)));
+        id: id,
+        name: name,
+        colorValue: colorValue,
+        iconKey: Value(iconKey),
+        essential: Value(essential)));
   }
+
+  /// RF65: cambia si la categoría es esencial y anota desde cuándo. Las
+  /// respuestas ya dadas en la revisión no cambian. No hace nada si el valor
+  /// es el mismo.
+  Future<void> setCategoryEssential(String id, bool essential,
+          {DateTime? at}) =>
+      transaction(() async {
+        final current = await (select(categories)
+              ..where((c) => c.id.equals(id)))
+            .getSingle();
+        if (current.essential == essential) return;
+        await (update(categories)..where((c) => c.id.equals(id)))
+            .write(CategoriesCompanion(essential: Value(essential)));
+        await into(categoryEssentialChanges).insert(
+            CategoryEssentialChangesCompanion.insert(
+                categoryId: id,
+                changedAt: at ?? DateTime.now(),
+                essential: essential));
+      });
+
+  Stream<List<CategoryEssentialChange>> watchEssentialChanges() =>
+      select(categoryEssentialChanges).watch();
 
   Future<void> updateCategoryInfo(String id,
       {required String name,
@@ -1016,6 +1150,8 @@ class AppDatabase extends _$AppDatabase {
         await (update(monthlyAdjustments)
               ..where((a) => a.categoryId.equals(fromId)))
             .write(MonthlyAdjustmentsCompanion(categoryId: Value(intoId)));
+        await (update(wishlistItems)..where((w) => w.categoryId.equals(fromId)))
+            .write(WishlistItemsCompanion(categoryId: Value(intoId)));
 
         // El presupuesto vigente es escalonado (cada fila vale hasta la
         // siguiente), así que basta escribir la suma en cada mes donde
@@ -1612,6 +1748,90 @@ class AppDatabase extends _$AppDatabase {
         AppSettingsCompanion.insert(key: key, value: value));
   }
 
+  // --- Lista de espera (RF61/RF62) ----------------------------------------
+
+  /// Todos los deseos, los que vencen antes primero.
+  Stream<List<WishlistItem>> watchWishlist() => (select(wishlistItems)
+        ..orderBy([
+          (w) => OrderingTerm.asc(w.dueAt),
+          (w) => OrderingTerm.asc(w.id),
+        ]))
+      .watch();
+
+  Future<int> insertWish(WishlistItemsCompanion wish) =>
+      into(wishlistItems).insert(wish);
+
+  /// RF61: edita un deseo que sigue esperando.
+  Future<void> updateWish(int id, WishlistItemsCompanion wish) =>
+      (update(wishlistItems)..where((w) => w.id.equals(id))).write(wish);
+
+  /// Borra el deseo y devuelve cómo restaurarlo tal cual (mismo id).
+  Future<Future<void> Function()> deleteWishUndoable(int id) async {
+    final row = await (select(wishlistItems)..where((w) => w.id.equals(id)))
+        .getSingle();
+    await (delete(wishlistItems)..where((w) => w.id.equals(id))).go();
+    return () => into(wishlistItems).insert(row.toCompanion(false));
+  }
+
+  /// Vuelve el deseo a la espera, sin decisión ni enlaces. Deshace
+  /// [decideWish] y [saveWishToGoal] (el aporte se borra aparte).
+  Future<void> resetWish(int id) =>
+      (update(wishlistItems)..where((w) => w.id.equals(id)))
+          .write(const WishlistItemsCompanion(
+        status: Value(kWishWaiting),
+        decidedAt: Value(null),
+        installmentPlanId: Value(null),
+        transactionId: Value(null),
+        contributionId: Value(null),
+      ));
+
+  /// RF62: marca la decisión sobre un deseo: comprado (con el plan o el gasto
+  /// que se creó) o descartado.
+  Future<void> decideWish(
+    int id, {
+    required String status,
+    required DateTime at,
+    int? installmentPlanId,
+    int? transactionId,
+  }) {
+    assert(status == kWishBought || status == kWishDiscarded);
+    return (update(wishlistItems)..where((w) => w.id.equals(id)))
+        .write(WishlistItemsCompanion(
+      status: Value(status),
+      decidedAt: Value(at),
+      installmentPlanId: Value(installmentPlanId),
+      transactionId: Value(transactionId),
+    ));
+  }
+
+  /// RF62: descarta el deseo y aporta su monto a la meta [goalId] (RF14), en
+  /// una sola transacción. Devuelve cómo deshacerlo.
+  Future<Future<void> Function()> saveWishToGoal(int id,
+          {required int goalId, required DateTime at}) =>
+      transaction(() async {
+        final wish = await (select(wishlistItems)
+              ..where((w) => w.id.equals(id)))
+            .getSingle();
+        final contributionId = await into(savingsContributions).insert(
+          SavingsContributionsCompanion.insert(
+            goalId: goalId,
+            amount: wish.amount,
+            date: at,
+            note: Value('Lista de espera: ${wish.name}'),
+          ),
+        );
+        await (update(wishlistItems)..where((w) => w.id.equals(id)))
+            .write(WishlistItemsCompanion(
+          status: const Value(kWishSaved),
+          decidedAt: Value(at),
+          contributionId: Value(contributionId),
+        ));
+        return () => transaction(() async {
+              await resetWish(id);
+              await deleteContribution(contributionId);
+            });
+      });
+
   // --- Respaldo local (RF16/RF17/RNF09) -------------------------------------
 
   /// Vuelca todas las tablas a JSON, listo para escribir a un archivo local.
@@ -1652,6 +1872,11 @@ class AppDatabase extends _$AppDatabase {
       'habitualOccurrences': (await select(habitualOccurrences).get())
           .map((r) => r.toJson())
           .toList(),
+      'wishlistItems':
+          (await select(wishlistItems).get()).map((r) => r.toJson()).toList(),
+      'categoryEssentialChanges': (await select(categoryEssentialChanges).get())
+          .map((r) => r.toJson())
+          .toList(),
       'appSettings':
           (await select(appSettings).get()).map((r) => r.toJson()).toList(),
     };
@@ -1663,6 +1888,8 @@ class AppDatabase extends _$AppDatabase {
     await transaction(() async {
       // Hijos antes que padres: con claves foráneas activas, borrar una
       // fila referenciada falla.
+      await delete(wishlistItems).go();
+      await delete(categoryEssentialChanges).go();
       await delete(savingsQuickAdds).go();
       await delete(savingsContributions).go();
       await delete(habitualOccurrences).go();
@@ -1686,6 +1913,9 @@ class AppDatabase extends _$AppDatabase {
         // cast de null a String en vez de restaurar con el ícono default.
         row.putIfAbsent('iconKey', () => 'category');
         row.putIfAbsent('archived', () => false); // anteriores a RF53
+        // Anteriores a RF65: la clasificación del catálogo.
+        row.putIfAbsent(
+            'essential', () => kEssentialCategoryIds.contains(row['id']));
         await into(categories)
             .insertOnConflictUpdate(Category.fromJson(row).toCompanion(false));
       }
@@ -1760,6 +1990,19 @@ class AppDatabase extends _$AppDatabase {
           in (data['savingsQuickAdds'] as List).cast<Map<String, dynamic>>()) {
         await into(savingsQuickAdds).insertOnConflictUpdate(
             SavingsQuickAdd.fromJson(row).toCompanion(false));
+      }
+      // `?? []`: respaldos anteriores a v4 no traen historial (RF65).
+      for (final row in (data['categoryEssentialChanges'] as List? ?? [])
+          .cast<Map<String, dynamic>>()) {
+        await into(categoryEssentialChanges).insertOnConflictUpdate(
+            CategoryEssentialChange.fromJson(row).toCompanion(false));
+      }
+      // `?? []`: respaldos anteriores a v4 no traen lista de espera (RF61).
+      // Va al final: un deseo decidido apunta a un plan, gasto o aporte.
+      for (final row in (data['wishlistItems'] as List? ?? [])
+          .cast<Map<String, dynamic>>()) {
+        await into(wishlistItems).insertOnConflictUpdate(
+            WishlistItem.fromJson(row).toCompanion(false));
       }
       for (final row in (data['appSettings'] as List? ?? [])
           .cast<Map<String, dynamic>>()) {

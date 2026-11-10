@@ -16,8 +16,9 @@ Future<void> markWeeklyReviewDone(WidgetRef ref) => ref
     .read(settingsRepositoryProvider)
     .set(kWeeklyReviewSettingKey, reviewDateKey(DateTime.now()));
 
-/// RF37: revisar los gastos de los últimos 7 días y marcar cada uno como
-/// "valió la pena" o "no tanto". Cada marca se guarda al tocarla.
+/// RF37/RF66: revisar los gastos no esenciales del período (7 o 14 días) y
+/// marcar cada uno como "valió la pena" o "no tanto". Cada marca se guarda
+/// al tocarla.
 class WeeklyReviewScreen extends ConsumerWidget {
   const WeeklyReviewScreen({super.key});
 
@@ -32,7 +33,12 @@ class WeeklyReviewScreen extends ConsumerWidget {
       ...ref.watch(monthTransactionsProvider(thisMonth)).valueOrNull ??
           const <Transaction>[],
     ];
-    final candidates = weeklyReviewCandidates(transactions, now);
+    final days = ref.watch(reviewFrequencyProvider);
+    final essential = ref.watch(essentialResolverProvider);
+    final candidates = essential == null
+        ? const <Transaction>[]
+        : weeklyReviewCandidates(transactions, now,
+            essential: essential, days: days);
     final categories = {
       for (final c
           in ref.watch(categoriesProvider).valueOrNull ?? const <Category>[])
@@ -49,16 +55,33 @@ class WeeklyReviewScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Text(
-                'Tus gastos de los últimos 7 días. Marca los que no valieron '
-                'tanto: no es para culparte, sino para ver dónde se va la '
-                'plata que no disfrutas.',
+                'Tus gastos no esenciales de los últimos $days días. Marca '
+                'los que no valieron tanto: no es para culparte, sino para '
+                'ver dónde se va la plata que no disfrutas. Lo esencial '
+                '(supermercado, arriendo, salud…) no se revisa; puedes '
+                'cambiarlo en Categorías.',
                 style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
+              ),
+            ),
+            // RF66: frecuencia de la revisión.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: SegmentedButton<int>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 7, label: Text('Cada semana')),
+                  ButtonSegment(value: 14, label: Text('Cada 15 días')),
+                ],
+                selected: {days},
+                onSelectionChanged: (v) => ref
+                    .read(settingsRepositoryProvider)
+                    .set(kReviewFrequencySettingKey, '${v.single}'),
               ),
             ),
             Expanded(
               child: candidates.isEmpty
                   ? Center(
-                      child: Text('No hay gastos para revisar esta semana.',
+                      child: Text('No hay gastos no esenciales para revisar.',
                           style: TextStyle(color: context.colors.inkSoft)))
                   : ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 20),

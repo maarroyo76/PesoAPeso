@@ -8,6 +8,8 @@ conexión a bancos: "peso a peso". Base de datos cifrada en el dispositivo
 recurrentes con motor de catch-up, metas de ahorro, respaldo/restauración en
 JSON y estadísticas con gráficos. La app no registra ingresos.
 
+El prototipo de escaneo de boletas se archivó en la rama archivo/escaner-boletas y no forma parte de la app.
+
 ## Stack
 
 - **Flutter** / Dart (Material)

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_title">Peso a Peso</string>
+    <string name="widget_label">Accesos rápidos</string>
+    <string name="widget_register">+ Registrar</string>
+    <string name="widget_register_description">Registrar un gasto</string>
+    <string name="widget_empty">Crea accesos rápidos en la app para registrar con un toque.</string>
+    <string name="widget_quick_description">Registrar %1$s, %2$s</string>
+    <string name="widget_description">Registra tus gastos habituales con un toque.</string>
+</resources>

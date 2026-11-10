@@ -21,7 +21,8 @@ const _category = Category(
     name: 'Transporte',
     colorValue: 0xFF3B6B78,
     iconKey: 'directions_car',
-    archived: false);
+    archived: false,
+    essential: false);
 
 RecurringTemplate _habitual(
         {required int weekdays, String note = 'Metro', DateTime? startDate}) =>

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../categorias/categorias_screen.dart';
 import '../cuotas/cuotas_screen.dart';
-import '../escaner/prueba_boletas_screen.dart';
+import '../lista_espera/lista_espera_screen.dart';
 import '../metodos_pago/payment_methods_screen.dart';
 import '../recurrentes/recurrentes_screen.dart';
 import '../respaldo/respaldo_screen.dart';
@@ -45,6 +45,13 @@ class AjustesScreen extends StatelessWidget {
           ),
           Divider(height: 1, indent: 72),
           _SettingsTile(
+            icon: Icons.hourglass_empty,
+            title: 'Lista de espera',
+            subtitle: 'Compras que decidiste pensar antes de hacer',
+            screen: ListaEsperaScreen(),
+          ),
+          Divider(height: 1, indent: 72),
+          _SettingsTile(
             icon: Icons.event_repeat_outlined,
             title: 'Gastos recurrentes',
             subtitle: 'Arriendo, suscripciones y otros pagos mensuales',
@@ -56,16 +63,6 @@ class AjustesScreen extends StatelessWidget {
             title: 'Respaldo',
             subtitle: 'Guardar o restaurar tus datos en un archivo',
             screen: RespaldoScreen(),
-          ),
-          // Herramienta del equipo para la prueba con boletas reales. Por
-          // ahora va en todas las builds (también release): la app aún no
-          // tiene usuarios externos. Volver a ocultarla antes de publicarla.
-          Divider(height: 1, indent: 72),
-          _SettingsTile(
-            icon: Icons.qr_code_scanner,
-            title: 'Prueba de boletas (equipo)',
-            subtitle: 'Mide si el timbre de las boletas se puede leer',
-            screen: PruebaBoletasScreen(),
           ),
         ],
       ),

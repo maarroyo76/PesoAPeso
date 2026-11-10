@@ -1,4 +1,5 @@
-// RF37: revisión semanal "¿Valió la pena?". RF44: lo marcado "no tanto".
+// RF37: revisión "¿Valió la pena?". RF65: categorías esenciales. RF66: solo
+// lo no esencial, cada semana o cada 15 días. RF67: lo que no valió la pena.
 
 import 'dart:ffi' show DynamicLibrary;
 
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqlite3/open.dart';
 import 'package:peso_a_peso/core/providers/app_providers.dart';
+import 'package:peso_a_peso/core/utils/essential.dart';
 import 'package:peso_a_peso/core/utils/weekly_review.dart';
 import 'package:peso_a_peso/data/local/app_database.dart';
 import 'package:peso_a_peso/features/revision/weekly_review_screen.dart';
@@ -31,6 +33,26 @@ Transaction _tx(int id, DateTime date,
       worthIt: worthIt,
     );
 
+Category _cat(String id, {bool essential = false}) => Category(
+    id: id,
+    name: id,
+    colorValue: 1,
+    iconKey: 'x',
+    archived: false,
+    essential: essential);
+
+/// Ocio y comida no son esenciales; supermercado sí.
+final _essential = EssentialResolver([
+  _cat('ocio'),
+  _cat('comida'),
+  _cat('supermercado', essential: true),
+], const []);
+
+CategoryEssentialChange _change(int id, String category, DateTime at,
+        {required bool essential}) =>
+    CategoryEssentialChange(
+        id: id, categoryId: category, changedAt: at, essential: essential);
+
 void main() {
   setUpAll(() async {
     open.overrideFor(
@@ -49,7 +71,10 @@ void main() {
       _tx(5, DateTime(2026, 10, 25), installment: 1),
       _tx(6, DateTime(2026, 10, 25), installment: 2),
     ];
-    expect(weeklyReviewCandidates(txs, today).map((t) => t.id), [3, 5, 1]);
+    expect(
+        weeklyReviewCandidates(txs, today, essential: _essential)
+            .map((t) => t.id),
+        [3, 5, 1]);
   });
 
   test('se propone una vez por semana y solo si hay algo sin revisar', () {
@@ -72,19 +97,172 @@ void main() {
         isFalse);
   });
 
-  test('RF44: "no tanto" por categoría; lo no revisado va aparte', () {
+  test('RF66: un gasto esencial no aparece en la revisión', () {
+    final txs = [
+      _tx(1, today),
+      _tx(2, today, category: 'supermercado'),
+      _tx(3, today, category: 'comida'),
+    ];
+    expect(
+        weeklyReviewCandidates(txs, today, essential: _essential)
+            .map((t) => t.id),
+        unorderedEquals([1, 3]));
+  });
+
+  test('RF66: quincenal mira 14 días y se propone cada 14', () {
+    final txs = [
+      _tx(1, DateTime(2026, 10, 15)), // hace 13 días: entra
+      _tx(2, DateTime(2026, 10, 14, 23)), // hace 14: fuera
+    ];
+    expect(
+        weeklyReviewCandidates(txs, today, essential: _essential, days: 14)
+            .map((t) => t.id),
+        [1]);
+    final pending = [_tx(1, today)];
+    expect(
+        weeklyReviewDue(
+            lastReview: '2026-10-21',
+            today: today,
+            candidates: pending,
+            days: 14),
+        isFalse);
+    expect(
+        weeklyReviewDue(
+            lastReview: '2026-10-14',
+            today: today,
+            candidates: pending,
+            days: 14),
+        isTrue);
+  });
+
+  test('RF66: la frecuencia guardada; semanal si falta o no es válida', () {
+    expect(reviewFrequencyDays(null), 7);
+    expect(reviewFrequencyDays('14'), 14);
+    expect(reviewFrequencyDays('7'), 7);
+    expect(reviewFrequencyDays('30'), 7);
+  });
+
+  test('RF67: "no tanto" por categoría y porcentaje de lo revisado', () {
     final summary = worthItSummary([
       _tx(1, today, amount: 5000, worthIt: false),
       _tx(2, today, amount: 3000, category: 'comida', worthIt: false),
       _tx(3, today, amount: 2000, worthIt: false),
-      _tx(4, today, amount: 9000, worthIt: true),
+      _tx(4, today, amount: 10000, worthIt: true),
       _tx(5, today, amount: 700),
       _tx(6, today, amount: 50000, recurring: true),
-    ]);
+      // Esencial: no cuenta aunque se haya marcado antes de RF66.
+      _tx(7, today, amount: 40000, category: 'supermercado', worthIt: false),
+      // Otro mes.
+      _tx(8, DateTime(2026, 9, 30), amount: 1000, worthIt: false),
+    ], DateTime(2026, 10), essential: _essential);
     expect(summary.notWorthByCategory, {'ocio': 7000, 'comida': 3000});
     expect(summary.notWorthTotal, 10000);
     expect(summary.reviewedCount, 4);
+    expect(summary.reviewedAmount, 20000);
+    expect(summary.notWorthPercent, 50);
     expect((summary.unreviewedCount, summary.unreviewedAmount), (1, 700));
+    // Los no revisados no cuentan en el porcentaje de "no tanto".
+    expect(summary.reviewedPercent, 80);
+  });
+
+  test('RF67: sin gastos revisados no hay porcentaje', () {
+    final summary = worthItSummary([_tx(1, today)], DateTime(2026, 10),
+        essential: _essential);
+    expect(summary.notWorthPercent, isNull);
+    expect(summary.reviewedPercent, 0);
+  });
+
+  group('RF68: porcentaje de "no tanto" de la categoría', () {
+    final now = DateTime(2026, 11, 10, 12);
+
+    List<Transaction> reviewed(int count, {int notWorth = 0}) => [
+          for (var i = 0; i < count; i++)
+            _tx(100 + i, DateTime(2026, 10, 1 + i), worthIt: i >= notWorth),
+        ];
+
+    test('con 5 revisados se muestra; con 4, no', () {
+      final rate = categoryNotWorthRate(reviewed(5, notWorth: 2), 'ocio', now,
+          essential: _essential);
+      expect(rate, (reviewed: 5, notWorth: 2, percent: 40));
+      expect(
+          categoryNotWorthRate(reviewed(4, notWorth: 2), 'ocio', now,
+              essential: _essential),
+          isNull);
+    });
+
+    test('solo los últimos 3 meses, de esa categoría y revisables', () {
+      final txs = [
+        ...reviewed(4, notWorth: 1),
+        // Hace más de 3 meses: fuera.
+        _tx(1, DateTime(2026, 8, 9), worthIt: false),
+        // El mismo día de hace 3 meses: dentro.
+        _tx(2, DateTime(2026, 8, 10, 8), worthIt: false),
+        // Otra categoría, sin revisar o recurrente: fuera.
+        _tx(3, DateTime(2026, 10, 20), category: 'comida', worthIt: false),
+        _tx(4, DateTime(2026, 10, 20)),
+        _tx(5, DateTime(2026, 10, 20), recurring: true, worthIt: false),
+      ];
+      expect(categoryNotWorthRate(txs, 'ocio', now, essential: _essential),
+          (reviewed: 5, notWorth: 2, percent: 40));
+    });
+
+    test('una categoría esencial no muestra el dato', () {
+      final txs = [
+        for (var i = 0; i < 6; i++)
+          _tx(i, DateTime(2026, 10, 1 + i),
+              category: 'supermercado', worthIt: false),
+      ];
+      expect(
+          categoryNotWorthRate(txs, 'supermercado', now, essential: _essential),
+          isNull);
+    });
+  });
+
+  group('RF65: el cambio vale desde ese momento', () {
+    final changedAt = DateTime(2026, 10, 15, 12);
+    // Ocio pasó a ser esencial el 15 de octubre.
+    final resolver = EssentialResolver([
+      _cat('ocio', essential: true),
+    ], [
+      _change(1, 'ocio', changedAt, essential: true),
+    ]);
+
+    test('antes del cambio vale el valor anterior', () {
+      expect(resolver.isEssential('ocio'), isTrue);
+      expect(resolver.isEssentialAt('ocio', DateTime(2026, 10, 14)), isFalse);
+      expect(resolver.isEssentialAt('ocio', changedAt), isTrue);
+      expect(resolver.isEssentialAt('ocio', DateTime(2026, 11, 1)), isTrue);
+      expect(resolver.isEssentialAt('desconocida', today), isFalse);
+    });
+
+    test('varios cambios: vale el último hasta esa fecha', () {
+      final r = EssentialResolver([
+        _cat('ocio'),
+      ], [
+        _change(2, 'ocio', DateTime(2026, 10, 20), essential: false),
+        _change(1, 'ocio', DateTime(2026, 10, 10), essential: true),
+      ]);
+      expect(r.isEssentialAt('ocio', DateTime(2026, 10, 5)), isFalse);
+      expect(r.isEssentialAt('ocio', DateTime(2026, 10, 15)), isTrue);
+      expect(r.isEssentialAt('ocio', DateTime(2026, 10, 25)), isFalse);
+    });
+
+    test('las respuestas no cambian y la estadística respeta la fecha', () {
+      final txs = [
+        _tx(1, DateTime(2026, 10, 10), amount: 4000, worthIt: false),
+        _tx(2, DateTime(2026, 10, 20), amount: 6000, worthIt: false),
+      ];
+      final summary =
+          worthItSummary(txs, DateTime(2026, 10), essential: resolver);
+      // El del 10 era no esencial y sigue contando; el del 20 ya no.
+      expect(summary.notWorthTotal, 4000);
+      expect(txs.map((t) => t.worthIt), [false, false]);
+      // Desde el cambio, ocio ya no se revisa.
+      expect(
+          weeklyReviewCandidates([_tx(3, today)], today, essential: resolver)
+              .isEmpty,
+          isTrue);
+    });
   });
 
   testWidgets('marcar "No tanto" se guarda y "Listo" cierra la revisión',
@@ -112,8 +290,11 @@ void main() {
                   name: 'Ocio',
                   colorValue: 1,
                   iconKey: 'x',
-                  archived: false)
+                  archived: false,
+                  essential: false)
             ])),
+        essentialChangesProvider
+            .overrideWith((ref) => Stream.value(<CategoryEssentialChange>[])),
         monthTransactionsProvider.overrideWith((ref, m) =>
             Stream.value(m.month == now.month ? [tx] : const <Transaction>[])),
       ],
