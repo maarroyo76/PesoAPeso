@@ -7,25 +7,21 @@ funciona sin conexión y sin vincular cuentas bancarias.
 
 ## Descripción
 
-**Qué hace.** Peso a Peso permite registrar cada gasto en pocos toques, fijar
-un presupuesto mensual total y por categoría, y ver en qué se va la plata. Su
+Mucha gente en Chile lleva sus gastos en una planilla de Excel o de memoria.
+Las planillas son lentas de mantener y no avisan nada, y las apps de
+finanzas suelen pedir acceso a las cuentas bancarias o guardar los datos en
+la nube. Peso a Peso está pensada para quienes quieren algo más práctico
+para el día a día sin entregar sus datos financieros: todo queda cifrado en
+el teléfono y registrar un gasto toma un par de toques.
+
+Además de llevar el registro, la app lo convierte en información para
+decidir. Con un presupuesto mensual total y por categoría, muestra cuánto se
+puede gastar hoy y avisa cuando una categoría se acerca a su límite. Su
 función principal, "Decidir antes de gastar", proyecta los meses siguientes
-con el gasto real del usuario: antes de una compra en cuotas muestra si va a
-alcanzar cada mes, la compara con pagar al contado o en otras cuotas, y
-permite dejarla en una lista de espera para decidir después.
-
-**A quién va dirigida.** A personas en Chile que hoy controlan sus gastos en
-una planilla de Excel o de memoria y buscan algo más práctico para el día a
-día, sin entregar sus datos financieros a un banco ni a un servicio en la
-nube. Considera el uso habitual de tarjetas de crédito en cuotas, propio del
-contexto chileno.
-
-**Qué problema resuelve.** Las apps de finanzas suelen pedir acceso a las
-cuentas bancarias o guardar los datos en la nube, y las planillas son lentas
-de mantener y no avisan nada. Peso a Peso guarda todo cifrado en el
-teléfono, hace el registro tan rápido como anotarlo en un papel y convierte
-ese registro en información para decidir: cuánto se puede gastar hoy, qué
-compromete una compra en cuotas y qué gastos no valieron la pena.
+con el gasto real del usuario: antes de una compra en cuotas, algo habitual
+con las tarjetas de crédito en Chile, muestra si va a alcanzar cada mes, la
+compara con pagar al contado o en otras cuotas, y permite dejarla en una
+lista de espera para decidir con calma.
 
 ### Funcionalidades
 
