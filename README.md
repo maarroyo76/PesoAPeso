@@ -112,7 +112,7 @@ iOS.
 
 | Integrante | Rol |
 |---|---|
-| Martín Arroyo Quilcat | Desarrollo de la aplicación |
+| Martín Arroyo Quilcat | Líder de proyecto y desarrollo |
 | Carlos Loncuante | Pruebas y diseño |
 | Renato Reinoso | Base de datos y documentación |
 
