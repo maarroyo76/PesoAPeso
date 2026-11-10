@@ -52,26 +52,30 @@ const categories = [
       name: 'Alimentación',
       colorValue: 0xFF2F6F4E,
       iconKey: 'restaurant',
-      archived: false),
+      archived: false,
+      essential: false),
   Category(
       id: 'transporte',
       name: 'Transporte',
       colorValue: 0xFFB8842E,
       iconKey: 'directions_car',
-      archived: false),
+      archived: false,
+      essential: false),
   Category(
       id: 'vivienda',
       name: 'Vivienda',
       colorValue: 0xFF3B6B78,
       iconKey: 'home',
-      archived: false),
+      archived: false,
+      essential: false),
   // RF53: una archivada, para que Categorías muestre su sección.
   Category(
       id: 'compras',
       name: 'Compras',
       colorValue: 0xFF8A5A2B,
       iconKey: 'shopping_bag',
-      archived: true),
+      archived: true,
+      essential: false),
 ];
 final now = DateTime.now();
 final month = DateTime(now.year, now.month);
@@ -179,6 +183,8 @@ Future<Future<void> Function()> pumpMainScreen(
       appDatabaseProvider.overrideWithValue(db),
       // RF62: sin deseos; la base real dejaría timers de sus streams.
       wishlistProvider.overrideWith((ref) => Stream.value(<WishlistItem>[])),
+      essentialChangesProvider
+          .overrideWith((ref) => Stream.value(<CategoryEssentialChange>[])),
       habitualTransactionIdsProvider
           .overrideWith((ref) => Stream.value(<int>{})),
       categoriesProvider.overrideWith((ref) => Stream.value(categories)),

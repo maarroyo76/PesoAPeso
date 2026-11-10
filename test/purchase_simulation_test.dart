@@ -126,7 +126,8 @@ void main() {
         name: 'Tecnología',
         colorValue: 0xFF3F6E9A,
         iconKey: 'devices',
-        archived: false);
+        archived: false,
+        essential: false);
 
     /// Abre el simulador sobre una pantalla de inicio, como desde la hoja
     /// de registro. Devuelve la base y la tarjeta.

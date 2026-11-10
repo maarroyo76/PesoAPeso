@@ -260,14 +260,19 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/v11.db');
 
-    // Una base v12 a la que se le quita la tabla nueva queda igual a una v11.
+    // Una base actual sin lo agregado en v12 y v13 queda igual a una v11.
     final current = AppDatabase.forTesting(NativeDatabase(file));
     await current.into(current.transactions).insert(
         TransactionsCompanion.insert(
             categoryId: 'transporte', amount: 1640, date: DateTime(2026, 11)));
     await current.close();
     final raw = sqlite3.sqlite3.open(file.path);
-    raw.execute('DROP TABLE wishlist_items; PRAGMA user_version = 11;');
+    raw.execute('''
+      DROP TABLE wishlist_items;
+      DROP TABLE category_essential_changes;
+      ALTER TABLE categories DROP COLUMN essential;
+      PRAGMA user_version = 11;
+    ''');
     raw.dispose();
 
     final migrated = AppDatabase.forTesting(NativeDatabase(file));
@@ -304,7 +309,8 @@ void main() {
         name: 'Tecnología',
         colorValue: 0xFF3F6E9A,
         iconKey: 'devices',
-        archived: false);
+        archived: false,
+        essential: false);
 
     Future<(AppDatabase, PaymentMethod)> setUpDb(WidgetTester tester) async {
       tester.view.physicalSize = const Size(800, 4000);

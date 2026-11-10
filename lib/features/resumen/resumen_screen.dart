@@ -230,22 +230,29 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
     );
   }
 
-  /// RF37: una vez por semana, invitar a revisar los gastos de los últimos
-  /// 7 días. Se puede omitir.
+  /// RF37/RF66: cada semana o cada 15 días, invitar a revisar los gastos no
+  /// esenciales del período. Se puede omitir.
   List<Widget> _weeklyReview(List<Transaction> transactions) {
     final last = ref.watch(settingProvider(kWeeklyReviewSettingKey));
-    if (!last.hasValue) return const [];
+    final essential = ref.watch(essentialResolverProvider);
+    if (!last.hasValue || essential == null) return const [];
+    final days = ref.watch(reviewFrequencyProvider);
     final prevMonth = DateTime(_month.year, _month.month - 1);
     final now = DateTime.now();
     final candidates = weeklyReviewCandidates([
       ...ref.watch(monthTransactionsProvider(prevMonth)).valueOrNull ??
           const <Transaction>[],
       ...transactions,
-    ], now);
+    ], now, essential: essential, days: days);
     if (!weeklyReviewDue(
-        lastReview: last.value, today: now, candidates: candidates)) {
+        lastReview: last.value,
+        today: now,
+        candidates: candidates,
+        days: days)) {
       return const [];
     }
+    final period =
+        days == kWeeklyReviewDays ? 'esta semana' : 'estas dos semanas';
     return [
       const SizedBox(height: 16),
       Container(
@@ -264,8 +271,9 @@ class _ResumenScreenState extends ConsumerState<ResumenScreen> {
             const SizedBox(height: 4),
             Text(
               candidates.length == 1
-                  ? 'Revisa tu gasto de esta semana.'
-                  : 'Revisa tus ${candidates.length} gastos de esta semana.',
+                  ? 'Revisa tu gasto no esencial de $period.'
+                  : 'Revisa tus ${candidates.length} gastos no esenciales '
+                      'de $period.',
               style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
             ),
             const SizedBox(height: 8),

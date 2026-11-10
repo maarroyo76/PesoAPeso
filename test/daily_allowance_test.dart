@@ -65,13 +65,16 @@ void main() {
           name: 'Ocio',
           colorValue: 0xFF6B3F5C,
           iconKey: 'theaters',
-          archived: false);
+          archived: false,
+          essential: false);
       await tester.pumpWidget(ProviderScope(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           // RF62: sin deseos; la base real dejaría timers de sus streams.
           wishlistProvider
               .overrideWith((ref) => Stream.value(<WishlistItem>[])),
+          essentialChangesProvider.overrideWith(
+              (ref) => Stream.value(<CategoryEssentialChange>[])),
           settingProvider.overrideWith((ref, key) => Stream.value(null)),
           paymentMethodsProvider
               .overrideWith((ref) => Stream.value(<PaymentMethod>[])),

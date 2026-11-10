@@ -9,9 +9,9 @@
 /// y los datos del gasto habitual. Una versión anterior de la app tomaría
 /// los gastos habituales por pagos mensuales, por eso sube la versión.
 ///
-/// v4 (RF61): agrega `wishlistItems`. Es una tabla nueva y opcional: una
-/// versión anterior la ignoraría sin dañar nada, pero perdería la lista de
-/// espera sin avisar, por eso sube la versión.
+/// v4 (RF61, RF65): agrega `wishlistItems`, `categoryEssentialChanges` y en
+/// `categories` si es esencial. Una versión anterior ignoraría todo eso sin
+/// dañar nada, pero lo perdería sin avisar, por eso sube la versión.
 const kBackupFormatVersion = 4;
 
 /// Tamaño máximo aceptado para un archivo de respaldo (un respaldo real pesa
@@ -70,6 +70,7 @@ void validateBackupData(Object? decoded) {
     'installmentPlans',
     'habitualOccurrences',
     'wishlistItems',
+    'categoryEssentialChanges',
     'appSettings',
   ];
 
@@ -144,6 +145,7 @@ void validateBackupData(Object? decoded) {
     for (final r in rows('savingsContributions', mustExist: true)) r['id']
   };
   checkRefs('wishlistItems', 'categoryId', categoryIds, nullable: true);
+  checkRefs('categoryEssentialChanges', 'categoryId', categoryIds);
   checkRefs('wishlistItems', 'paymentMethodId', paymentMethodIds,
       nullable: true);
   checkRefs('wishlistItems', 'installmentPlanId', planIds, nullable: true);

@@ -241,7 +241,7 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
         const SizedBox(height: 16),
         _MonthBarsSection(months: months),
         PaymentStatsSection(months: months, transactions: txCurrent),
-        WorthItSection(transactions: txCurrent, categoriesById: categoriesById),
+        WorthItSection(months: months, categoriesById: categoriesById),
         FixedCostSection(months: months),
         WishlistStatsSection(month: months.last),
       ],

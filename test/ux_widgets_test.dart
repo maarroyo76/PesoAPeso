@@ -33,12 +33,15 @@ void main() {
         name: 'Ocio',
         colorValue: 0xFF6B3F5C,
         iconKey: 'theaters',
-        archived: false);
+        archived: false,
+        essential: false);
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         // RF62: sin deseos; la base real dejaría timers de sus streams.
         wishlistProvider.overrideWith((ref) => Stream.value(<WishlistItem>[])),
+        essentialChangesProvider
+            .overrideWith((ref) => Stream.value(<CategoryEssentialChange>[])),
         habitualTransactionIdsProvider
             .overrideWith((ref) => Stream.value(<int>{})),
         settingProvider.overrideWith((ref, key) => Stream.value(null)),

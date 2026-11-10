@@ -157,6 +157,10 @@ class _CategoryTile extends ConsumerWidget {
           style: TextStyle(
               fontWeight: FontWeight.w500,
               color: c.archived ? context.colors.inkSoft : null)),
+      subtitle: c.essential
+          ? Text('Esencial',
+              style: TextStyle(fontSize: 12, color: context.colors.inkSoft))
+          : null,
       onTap: () => showCategoryEditor(context, ref, category: c),
       trailing: PopupMenuButton<_CategoryAction>(
         tooltip: 'Opciones de ${c.name}',
@@ -287,6 +291,7 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
   var selectedIconKey =
       category?.iconKey ?? kSelectableCategoryIcons.keys.first;
   final iconEntries = kSelectableCategoryIcons.entries.toList();
+  var essential = category?.essential ?? false;
   String? nameError;
 
   final result = await showDialog<bool>(
@@ -314,7 +319,21 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
                     border: const UnderlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                // RF65: lo esencial no entra en la revisión "¿Valió la pena?".
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: essential,
+                  onChanged: (v) => setDialogState(() => essential = v),
+                  title: const Text('Gasto esencial',
+                      style: TextStyle(fontSize: 14)),
+                  subtitle: Text(
+                    'Lo esencial no se revisa en "¿Valió la pena?". '
+                    'El cambio vale desde ahora.',
+                    style:
+                        TextStyle(fontSize: 12, color: context.colors.inkSoft),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Text('COLOR',
                     style: TextStyle(
                         fontSize: 11,
@@ -461,10 +480,12 @@ Future<void> showCategoryEditor(BuildContext context, WidgetRef ref,
         id: id,
         name: name,
         colorValue: selectedColor,
-        iconKey: selectedIconKey);
+        iconKey: selectedIconKey,
+        essential: essential);
   } else {
     await repo.updateCategoryInfo(category.id,
         name: name, colorValue: selectedColor, iconKey: selectedIconKey);
+    await repo.setEssential(category.id, essential);
   }
 }
 

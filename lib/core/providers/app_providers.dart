@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
-import '../../data/repositories/wishlist_repository.dart';
 import '../../data/repositories/backup_repository.dart';
 import '../../data/repositories/categories_repository.dart';
 import '../../data/repositories/installments_repository.dart';
@@ -11,7 +10,10 @@ import '../../data/repositories/recurring_templates_repository.dart';
 import '../../data/repositories/savings_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/transactions_repository.dart';
+import '../../data/repositories/wishlist_repository.dart';
 import '../utils/budget_resolver.dart';
+import '../utils/essential.dart';
+import '../utils/weekly_review.dart';
 
 /// Mes calendario en curso. Se refresca al volver la app a primer plano, para
 /// que una sesión que cruza el cambio de mes no siga mostrando el mes viejo.
@@ -143,6 +145,22 @@ final categoriesProvider = StreamProvider(
     (ref) => ref.watch(categoriesRepositoryProvider).watchCategories());
 
 /// UX06: todos los gastos, para el historial.
+/// RF65: historial de cambios de "esencial" de las categorías.
+final essentialChangesProvider = StreamProvider(
+    (ref) => ref.watch(categoriesRepositoryProvider).watchEssentialChanges());
+
+/// RF65: si cada categoría es (o era) esencial. Null mientras carga.
+final essentialResolverProvider = Provider<EssentialResolver?>((ref) {
+  final categories = ref.watch(categoriesProvider).valueOrNull;
+  final changes = ref.watch(essentialChangesProvider).valueOrNull;
+  if (categories == null || changes == null) return null;
+  return EssentialResolver(categories, changes);
+});
+
+/// RF66: cada cuántos días se propone la revisión (7 o 14).
+final reviewFrequencyProvider = Provider<int>((ref) => reviewFrequencyDays(
+    ref.watch(settingProvider(kReviewFrequencySettingKey)).valueOrNull));
+
 final allTransactionsProvider = StreamProvider(
     (ref) => ref.watch(transactionsRepositoryProvider).watchAll());
 
