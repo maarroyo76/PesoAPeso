@@ -172,6 +172,52 @@ void main() {
     expect(summary.reviewedPercent, 0);
   });
 
+  group('RF68: porcentaje de "no tanto" de la categoría', () {
+    final now = DateTime(2026, 11, 10, 12);
+
+    List<Transaction> reviewed(int count, {int notWorth = 0}) => [
+          for (var i = 0; i < count; i++)
+            _tx(100 + i, DateTime(2026, 10, 1 + i), worthIt: i >= notWorth),
+        ];
+
+    test('con 5 revisados se muestra; con 4, no', () {
+      final rate = categoryNotWorthRate(reviewed(5, notWorth: 2), 'ocio', now,
+          essential: _essential);
+      expect(rate, (reviewed: 5, notWorth: 2, percent: 40));
+      expect(
+          categoryNotWorthRate(reviewed(4, notWorth: 2), 'ocio', now,
+              essential: _essential),
+          isNull);
+    });
+
+    test('solo los últimos 3 meses, de esa categoría y revisables', () {
+      final txs = [
+        ...reviewed(4, notWorth: 1),
+        // Hace más de 3 meses: fuera.
+        _tx(1, DateTime(2026, 8, 9), worthIt: false),
+        // El mismo día de hace 3 meses: dentro.
+        _tx(2, DateTime(2026, 8, 10, 8), worthIt: false),
+        // Otra categoría, sin revisar o recurrente: fuera.
+        _tx(3, DateTime(2026, 10, 20), category: 'comida', worthIt: false),
+        _tx(4, DateTime(2026, 10, 20)),
+        _tx(5, DateTime(2026, 10, 20), recurring: true, worthIt: false),
+      ];
+      expect(categoryNotWorthRate(txs, 'ocio', now, essential: _essential),
+          (reviewed: 5, notWorth: 2, percent: 40));
+    });
+
+    test('una categoría esencial no muestra el dato', () {
+      final txs = [
+        for (var i = 0; i < 6; i++)
+          _tx(i, DateTime(2026, 10, 1 + i),
+              category: 'supermercado', worthIt: false),
+      ];
+      expect(
+          categoryNotWorthRate(txs, 'supermercado', now, essential: _essential),
+          isNull);
+    });
+  });
+
   group('RF65: el cambio vale desde ese momento', () {
     final changedAt = DateTime(2026, 10, 15, 12);
     // Ocio pasó a ser esencial el 15 de octubre.

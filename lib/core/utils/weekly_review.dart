@@ -143,3 +143,41 @@ WorthItSummary worthItSummary(
     unreviewedCount: unreviewedCount,
   );
 }
+
+/// RF68: gastos revisados necesarios en una categoría para mostrar su
+/// porcentaje de "no tanto". Con menos, el dato no dice mucho.
+const kMinReviewedForCategoryRate = 5;
+
+/// RF68: meses hacia atrás que se miran.
+const kCategoryRateMonths = 3;
+
+/// RF68: en los últimos 3 meses (desde el mismo día), cuántos gastos
+/// revisados tiene [categoryId] y cuántos se marcaron "no tanto". Cuenta solo
+/// los gastos de cuando la categoría era no esencial, como RF67. Null si hay
+/// menos de [kMinReviewedForCategoryRate] revisados.
+({int reviewed, int notWorth, int percent})? categoryNotWorthRate(
+  Iterable<Transaction> transactions,
+  String categoryId,
+  DateTime today, {
+  required EssentialResolver essential,
+}) {
+  final from =
+      DateTime(today.year, today.month - kCategoryRateMonths, today.day);
+  final to = DateTime(today.year, today.month, today.day + 1);
+  var reviewed = 0, notWorth = 0;
+  for (final t in transactions) {
+    if (t.categoryId != categoryId || t.worthIt == null) continue;
+    if (t.date.isBefore(from) || !t.date.isBefore(to)) continue;
+    if (!isReviewable(t) || essential.isEssentialAt(categoryId, t.date)) {
+      continue;
+    }
+    reviewed++;
+    if (t.worthIt == false) notWorth++;
+  }
+  if (reviewed < kMinReviewedForCategoryRate) return null;
+  return (
+    reviewed: reviewed,
+    notWorth: notWorth,
+    percent: (notWorth * 100 / reviewed).round(),
+  );
+}

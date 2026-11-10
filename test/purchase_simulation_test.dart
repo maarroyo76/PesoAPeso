@@ -3,7 +3,7 @@
 
 import 'dart:ffi' show DynamicLibrary;
 
-import 'package:drift/drift.dart' show OrderingTerm;
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -131,7 +131,8 @@ void main() {
 
     /// Abre el simulador sobre una pantalla de inicio, como desde la hoja
     /// de registro. Devuelve la base y la tarjeta.
-    Future<(AppDatabase, PaymentMethod)> open(WidgetTester tester) async {
+    Future<(AppDatabase, PaymentMethod)> open(WidgetTester tester,
+        {Future<void> Function(AppDatabase db)? seed}) async {
       tester.view.physicalSize = const Size(800, 4000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -143,6 +144,7 @@ void main() {
             alias: 'CMR', kind: kPaymentKindCredit, colorValue: 1);
         await db.into(db.monthlyBudgets).insert(MonthlyBudgetsCompanion.insert(
             year: 2026, month: 1, amount: 800000));
+        await seed?.call(db);
         return (await db.select(db.paymentMethods).get())
             .singleWhere((m) => m.id == id);
       }))!;
@@ -277,6 +279,28 @@ void main() {
       await tester.tap(find.text('Deshacer'));
       await settle(tester);
       expect(await transactions(tester, db), isEmpty);
+      await unmount(tester);
+    });
+
+    testWidgets('RF68: el simulador muestra el "no tanto" de la categoría',
+        (tester) async {
+      final now = DateTime.now();
+      await open(tester, seed: (db) async {
+        for (var i = 0; i < 5; i++) {
+          await db.into(db.transactions).insert(TransactionsCompanion.insert(
+              categoryId: 'tecnologia',
+              amount: 20000,
+              date: now.subtract(Duration(days: 3 + i)),
+              worthIt: Value(i >= 3)));
+        }
+      });
+      const hint = 'En los últimos 3 meses, 3 de tus 5 gastos revisados en '
+          'Tecnología no valieron tanto (60%).';
+      expect(find.text(hint), findsNothing,
+          reason: 'sin categoría elegida no hay dato');
+      await tester.tap(find.byType(ExpenseCategoryChip));
+      await settle(tester);
+      expect(find.text(hint), findsOneWidget);
       await unmount(tester);
     });
 

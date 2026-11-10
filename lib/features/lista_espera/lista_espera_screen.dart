@@ -13,6 +13,7 @@ import '../../core/widgets/load_error.dart';
 import '../../core/widgets/section_label.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
+import '../revision/category_worth_hint.dart';
 import '../simulador/simulador_screen.dart';
 import 'wish_decision_card.dart';
 
@@ -244,10 +245,17 @@ class _WishRow extends StatelessWidget {
         title: Text(wish.name,
             style: TextStyle(
                 color: muted ? context.colors.inkSoft : context.colors.ink)),
-        subtitle: Text(
-          '${currencyFmt.format(wish.amount)} $how',
-          style: appAmountTextStyle.copyWith(
-              fontSize: 12, color: context.colors.inkSoft),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${currencyFmt.format(wish.amount)} $how',
+              style: appAmountTextStyle.copyWith(
+                  fontSize: 12, color: context.colors.inkSoft),
+            ),
+            // RF68: solo en los que siguen esperando.
+            if (!muted) CategoryWorthHint(categoryId: wish.categoryId),
+          ],
         ),
         trailing: Text(trailing,
             style: TextStyle(fontSize: 13, color: context.colors.inkSoft)),

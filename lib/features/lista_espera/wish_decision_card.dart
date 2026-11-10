@@ -9,6 +9,7 @@ import '../../core/utils/purchase_simulation.dart';
 import '../../core/utils/wishlist.dart';
 import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
+import '../revision/category_worth_hint.dart';
 import '../simulador/simulador_screen.dart';
 import '../simulador/simulation_inputs.dart';
 
@@ -83,6 +84,8 @@ class WishDecisionCard extends ConsumerWidget {
             '${currencyFmt.format(wish.amount)} $how',
             style: TextStyle(fontSize: 13, color: context.colors.inkSoft),
           ),
+          // RF68: cómo le ha ido con gastos de esta categoría.
+          CategoryWorthHint(categoryId: wish.categoryId),
           if (projection != null) ...[
             const SizedBox(height: 4),
             Text(

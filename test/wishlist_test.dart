@@ -5,6 +5,7 @@
 import 'dart:ffi' show DynamicLibrary;
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -443,6 +444,30 @@ void main() {
       await tester.tap(find.text('Deshacer'));
       await settle(tester);
       expect(find.text('¿Todavía quieres "Audífonos"?'), findsOneWidget);
+      await unmount(tester);
+    });
+
+    testWidgets('RF68: la tarjeta muestra el "no tanto" de la categoría',
+        (tester) async {
+      final (db, card) = await setUpDb(tester);
+      final now = DateTime.now();
+      await tester.runAsync(() async {
+        for (var i = 0; i < 5; i++) {
+          await db.into(db.transactions).insert(TransactionsCompanion.insert(
+              categoryId: 'tecnologia',
+              amount: 15000,
+              date: now.subtract(Duration(days: 2 + i)),
+              worthIt: Value(i != 0)));
+        }
+      });
+      await insertWish(tester, db,
+          dueAt: now.subtract(const Duration(hours: 1)));
+      await tester.pumpWidget(cards(db, card));
+      await settle(tester);
+      expect(
+          find.text('En los últimos 3 meses, 1 de tus 5 gastos revisados en '
+              'Tecnología no valieron tanto (20%).'),
+          findsOneWidget);
       await unmount(tester);
     });
 

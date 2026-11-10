@@ -17,9 +17,10 @@ import '../../core/widgets/undo_snack_bar.dart';
 import '../../data/local/app_database.dart';
 import '../agregar_gasto/expense_form.dart';
 import '../categorias/category_filters.dart';
+import '../lista_espera/lista_espera_screen.dart';
 import '../metodos_pago/payment_method_labels.dart';
 import '../metodos_pago/payment_methods_screen.dart';
-import '../lista_espera/lista_espera_screen.dart';
+import '../revision/category_worth_hint.dart';
 
 /// RF57–RF60: simula una compra contra la proyección de los meses
 /// siguientes, la compara con otras formas de pago y, si el usuario decide
@@ -317,6 +318,8 @@ class _SimuladorScreenState extends ConsumerState<SimuladorScreen> {
               ),
           ],
         ),
+        // RF68: cómo le ha ido al usuario con gastos de esta categoría.
+        CategoryWorthHint(categoryId: _categoryId, today: widget.today),
         const SizedBox(height: 16),
         TextField(
           controller: _noteController,
