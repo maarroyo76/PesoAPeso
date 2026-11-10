@@ -96,6 +96,13 @@ class RecurringTemplatesRepository {
         today: today ?? DateTime.now(),
       );
 
+  /// RF64: ids de los gastos que salieron de confirmar un gasto habitual.
+  Stream<Set<int>> watchHabitualTransactionIds() =>
+      _db.watchHabitualOccurrencesSince(DateTime(1970)).map((rows) => {
+            for (final o in rows)
+              if (o.transactionId != null) o.transactionId!,
+          });
+
   /// Decisiones de la última semana más un día de margen (RF49).
   Stream<List<HabitualOccurrence>> watchRecentOccurrences(DateTime now) =>
       _db.watchHabitualOccurrencesSince(

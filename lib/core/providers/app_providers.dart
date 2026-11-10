@@ -58,6 +58,11 @@ final habitualOccurrencesProvider = StreamProvider((ref) {
       .watchRecentOccurrences(DateTime.now());
 });
 
+/// RF64: gastos registrados desde un gasto habitual (no llevan otra marca).
+final habitualTransactionIdsProvider = StreamProvider((ref) => ref
+    .watch(recurringTemplatesRepositoryProvider)
+    .watchHabitualTransactionIds());
+
 final quickExpenseTemplatesRepositoryProvider =
     Provider<QuickExpenseTemplatesRepository>(
   (ref) => QuickExpenseTemplatesRepository(ref.watch(appDatabaseProvider)),

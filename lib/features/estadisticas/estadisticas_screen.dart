@@ -13,7 +13,9 @@ import '../../core/widgets/month_swipe.dart';
 import '../../core/widgets/section_label.dart';
 import '../../core/widgets/load_error.dart';
 import '../../data/local/app_database.dart';
+import 'fixed_cost_section.dart';
 import 'payment_stats_section.dart';
+import 'wishlist_stats_section.dart';
 import 'worth_it_section.dart';
 
 class EstadisticasScreen extends ConsumerStatefulWidget {
@@ -240,6 +242,8 @@ class _EstadisticasScreenState extends ConsumerState<EstadisticasScreen> {
         _MonthBarsSection(months: months),
         PaymentStatsSection(months: months, transactions: txCurrent),
         WorthItSection(transactions: txCurrent, categoriesById: categoriesById),
+        FixedCostSection(months: months),
+        WishlistStatsSection(month: months.last),
       ],
     );
   }

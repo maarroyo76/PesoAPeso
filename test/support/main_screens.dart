@@ -179,6 +179,8 @@ Future<Future<void> Function()> pumpMainScreen(
       appDatabaseProvider.overrideWithValue(db),
       // RF62: sin deseos; la base real dejaría timers de sus streams.
       wishlistProvider.overrideWith((ref) => Stream.value(<WishlistItem>[])),
+      habitualTransactionIdsProvider
+          .overrideWith((ref) => Stream.value(<int>{})),
       categoriesProvider.overrideWith((ref) => Stream.value(categories)),
       monthTransactionsProvider
           .overrideWith((ref, m) => Stream.value(txsFor(m))),
