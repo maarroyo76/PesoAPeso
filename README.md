@@ -118,8 +118,10 @@ El equipo trabaja con **Kanban**, con el tablero en GitHub Projects. Cada
 tarea pasa por las columnas del tablero hasta quedar terminada, sin sprints
 de duración fija. El código y la documentación viven en este repositorio:
 los cambios se hacen en ramas y entran a `main` mediante pull requests, y
-GitHub Actions corre el análisis y las pruebas en cada uno. Las evidencias
-del curso están en [`Documentos Capstone/`](Documentos%20Capstone).
+GitHub Actions corre el análisis y las pruebas en cada uno. La
+documentación del proyecto (gestión ágil, diseño, plan de pruebas y manual
+técnico) está en [`docs/`](docs), y las evidencias del curso, en
+[`Documentos Capstone/`](Documentos%20Capstone).
 
 ## Arquitectura
 
@@ -183,6 +185,7 @@ test/              tests de lógica, de base de datos y de widgets
 android/           proyecto Android, incluido el widget de inicio (Kotlin)
 brand/             logo e isotipo en SVG
 assets/            fuentes (Crimson Pro, IBM Plex Mono) e ícono de la app
+docs/              documentación del proyecto (Markdown)
 Documentos Capstone/  evidencias del curso por fase
 ```
 
