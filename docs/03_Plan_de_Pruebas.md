@@ -3,7 +3,7 @@
 ## 1. Estrategia
 
 Las pruebas son automáticas y viven en `test/`. Cada historia agrega sus
-tests antes de darse por terminada (ver `04_Definition_of_Done.md`), y GitHub
+tests antes de darse por terminada (ver la Definition of Done en `01_Gestion_Agil.md`), y GitHub
 Actions corre el análisis y todas las pruebas en cada push y pull request.
 
 | Tipo | Qué prueba | Cómo |

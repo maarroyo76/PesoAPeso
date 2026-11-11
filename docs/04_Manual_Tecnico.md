@@ -149,7 +149,7 @@ lib/
     repositories/      acceso a datos por dominio
     backup/            validación del respaldo
   features/            una carpeta por pantalla
-test/                  pruebas automáticas (ver 07_Plan_de_Pruebas.md)
+test/                  pruebas automáticas (ver 03_Plan_de_Pruebas.md)
 android/app/src/main/  manifiesto, widget de inicio (Kotlin) y recursos
 ```
 

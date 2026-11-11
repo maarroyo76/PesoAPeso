@@ -1,12 +1,13 @@
-"""Exporta los documentos Markdown de la carpeta Capstone a Word (.docx).
+"""Exporta los documentos Markdown de docs/ a Word (.docx) para la entrega.
 
 Los diagramas Mermaid se dibujan con Chrome sin interfaz y se insertan como
 imagen. Uso:
 
     python3 -m venv /tmp/venv && /tmp/venv/bin/pip install python-docx pillow
-    /tmp/venv/bin/python tool/exportar_docs.py "Documentos Capstone/Fase 2/Evidencias Proyecto/Evidencias de documentación"
+    /tmp/venv/bin/python tool/exportar_docs.py docs "Documentos Capstone/Fase 2/Evidencias Proyecto/Evidencias de documentación"
 
-Necesita Google Chrome instalado y conexión para cargar Mermaid desde
+El primer argumento es la carpeta de los .md y el segundo, donde quedan los
+.docx. Necesita Google Chrome instalado y conexión para cargar Mermaid desde
 cdn.jsdelivr.net. Convierte el subconjunto de Markdown que usan estos
 documentos: títulos, párrafos, listas, casillas, tablas, bloques de código,
 negrita, cursiva, código y enlaces.
@@ -137,7 +138,7 @@ def add_table(doc, rows):
     doc.add_paragraph()
 
 
-def convert(md_path: pathlib.Path) -> pathlib.Path:
+def convert(md_path: pathlib.Path, out_dir: pathlib.Path) -> pathlib.Path:
     doc = Document()
     for section in doc.sections:
         section.left_margin = section.right_margin = Cm(2.2)
@@ -207,12 +208,13 @@ def convert(md_path: pathlib.Path) -> pathlib.Path:
         i += 1
     flush()
 
-    out = md_path.with_suffix(".docx")
+    out = out_dir / (md_path.stem + ".docx")
     doc.save(out)
     return out
 
 
 if __name__ == "__main__":
-    folder = pathlib.Path(sys.argv[1])
-    for md in sorted(folder.glob("[0-9][0-9]_*.md")):
-        print("→", convert(md).name)
+    source, target = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+    target.mkdir(parents=True, exist_ok=True)
+    for md in sorted(source.glob("[0-9][0-9]_*.md")):
+        print("→", convert(md, target).name)
